@@ -113,10 +113,10 @@ export default function CompanyDetail({ companyId, onBack }: CompanyDetailProps)
         <TabsContent value="info" className="mt-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <InfoCard title="Coordonnées fiscales">
-              <InfoRow label="SIRET" value={company.siret} />
-              <InfoRow label="N° TVA" value={company.tvaNumber} />
-              <InfoRow label="RCS" value={company.registrationNumber} />
-              <InfoRow label="Code NAF" value={company.nafCode} />
+              <InfoRow label="NIF" value={company.nif} />
+              <InfoRow label="NIS" value={company.nis} />
+              <InfoRow label="RC" value={company.rc} />
+              <InfoRow label="ART" value={company.art} />
               <InfoRow label="Capital" value={company.capital} />
               <InfoRow label="Exercice fiscal" value={company.fiscalYear} />
             </InfoCard>
@@ -124,7 +124,7 @@ export default function CompanyDetail({ companyId, onBack }: CompanyDetailProps)
             <InfoCard title="Adresse">
               <InfoRow label="Adresse" value={company.address} />
               <InfoRow label="Code postal" value={company.postalCode} />
-              <InfoRow label="Ville" value={company.city} />
+              <InfoRow label="Wilaya / Ville" value={company.city} />
               <InfoRow label="Pays" value={company.country} />
             </InfoCard>
 
@@ -235,9 +235,20 @@ export default function CompanyDetail({ companyId, onBack }: CompanyDetailProps)
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
-                              {inv.status !== 'paid' && (
-                                <DropdownMenuItem onClick={() => markAsPaid(inv.id)} className="text-green-600">
+                              {inv.status !== 'paid' ? (
+                                <DropdownMenuItem onClick={() => {
+                                  const date = prompt('Date de paiement (YYYY-MM-DD):', new Date().toISOString().split('T')[0]);
+                                  if (date) markAsPaid(inv.id, date);
+                                }} className="text-green-600">
                                   ✓ Marquer comme payée
+                                </DropdownMenuItem>
+                              ) : (
+                                <DropdownMenuItem onClick={() => {
+                                  const current = inv.paidDate || new Date().toISOString().split('T')[0];
+                                  const date = prompt('Modifier la date de paiement (YYYY-MM-DD):', current);
+                                  if (date) markAsPaid(inv.id, date);
+                                }} className="text-blue-600">
+                                  Modifier la date de paiement
                                 </DropdownMenuItem>
                               )}
                               <DropdownMenuItem

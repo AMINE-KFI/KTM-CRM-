@@ -64,8 +64,8 @@ function AppContent() {
             <Menu className="w-6 h-6" />
           </button>
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-blue-600 to-blue-800 flex items-center justify-center text-white font-bold text-sm">K</div>
-            <span className="font-bold text-gray-900 text-sm">KATAMINE</span>
+            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-blue-600 to-blue-800 flex items-center justify-center text-white font-bold text-sm">KL</div>
+            <span className="font-bold text-gray-900 text-sm">KL TOOLS</span>
           </div>
           <div className="w-6" />
         </header>
@@ -86,10 +86,10 @@ function SidebarContent({ page, navigate }: { page: Page; navigate: (p: string) 
       <div className="p-6 border-b border-gray-50">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-600 to-blue-800 flex items-center justify-center text-white font-bold text-lg">
-            K
+            KL
           </div>
           <div>
-            <p className="font-bold text-gray-900 leading-tight">KATAMINE</p>
+            <p className="font-bold text-gray-900 leading-tight">KL TOOLS</p>
             <p className="text-[11px] text-gray-400 leading-tight">CRM Clients</p>
           </div>
         </div>
@@ -117,7 +117,7 @@ function SidebarContent({ page, navigate }: { page: Page; navigate: (p: string) 
 
       {/* Footer */}
       <div className="p-4 border-t border-gray-50">
-        <p className="text-[10px] text-gray-300 text-center">KATAMINE CRM v1.0</p>
+        <p className="text-[10px] text-gray-300 text-center">KL TOOLS CRM v1.0</p>
       </div>
     </>
   );

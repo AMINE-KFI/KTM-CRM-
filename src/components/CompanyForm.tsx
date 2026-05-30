@@ -14,7 +14,7 @@ interface CompanyFormProps {
   onClose: () => void;
 }
 
-const LEGAL_FORMS = ['SAS', 'SARL', 'SA', 'EURL', 'SNC', 'SCI', 'Auto-entrepreneur', 'Autre'];
+const LEGAL_FORMS = ['SARL', 'EURL', 'SPA', 'SNC', 'SCS', 'Auto-entrepreneur', 'Autre'];
 
 export default function CompanyForm({ company, onClose }: CompanyFormProps) {
   const { addCompany, updateCompany } = useCRM();
@@ -23,10 +23,10 @@ export default function CompanyForm({ company, onClose }: CompanyFormProps) {
   const [form, setForm] = useState({
     name: company?.name || '',
     legalForm: company?.legalForm || 'SARL',
-    siret: company?.siret || '',
-    tvaNumber: company?.tvaNumber || '',
-    registrationNumber: company?.registrationNumber || '',
-    nafCode: company?.nafCode || '',
+    nif: company?.nif || '',
+    nis: company?.nis || '',
+    rc: company?.rc || '',
+    art: company?.art || '',
     capital: company?.capital || '',
     fiscalYear: company?.fiscalYear || '',
     address: company?.address || '',
@@ -105,38 +105,38 @@ export default function CompanyForm({ company, onClose }: CompanyFormProps) {
           <Section title="Coordonnées fiscales">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label>Numéro SIRET</Label>
+                <Label>Numéro d'Identification Fiscale (NIF)</Label>
                 <Input
-                  value={form.siret}
-                  onChange={e => set('siret', e.target.value)}
-                  placeholder="123 456 789 00010"
+                  value={form.nif}
+                  onChange={e => set('nif', e.target.value)}
+                  placeholder="000012345678900"
                   className="mt-1"
                 />
               </div>
               <div>
-                <Label>Numéro TVA intracommunautaire</Label>
+                <Label>Numéro d'Identification Statistique (NIS)</Label>
                 <Input
-                  value={form.tvaNumber}
-                  onChange={e => set('tvaNumber', e.target.value)}
-                  placeholder="FR12345678900"
+                  value={form.nis}
+                  onChange={e => set('nis', e.target.value)}
+                  placeholder="123456789012345"
                   className="mt-1"
                 />
               </div>
               <div>
-                <Label>RCS / Immatriculation</Label>
+                <Label>Registre de Commerce (RC)</Label>
                 <Input
-                  value={form.registrationNumber}
-                  onChange={e => set('registrationNumber', e.target.value)}
-                  placeholder="RCS Paris B 123 456 789"
+                  value={form.rc}
+                  onChange={e => set('rc', e.target.value)}
+                  placeholder="12/00-0123456 B 20"
                   className="mt-1"
                 />
               </div>
               <div>
-                <Label>Code NAF / APE</Label>
+                <Label>Article d'Imposition (ART)</Label>
                 <Input
-                  value={form.nafCode}
-                  onChange={e => set('nafCode', e.target.value)}
-                  placeholder="ex: 6201Z"
+                  value={form.art}
+                  onChange={e => set('art', e.target.value)}
+                  placeholder="1201234567"
                   className="mt-1"
                 />
               </div>
@@ -174,11 +174,11 @@ export default function CompanyForm({ company, onClose }: CompanyFormProps) {
                 />
               </div>
               <div>
-                <Label>Ville</Label>
+                <Label>Wilaya / Ville</Label>
                 <Input
                   value={form.city}
                   onChange={e => set('city', e.target.value)}
-                  placeholder="Paris"
+                  placeholder="Alger"
                   className="mt-1"
                 />
               </div>
@@ -187,7 +187,7 @@ export default function CompanyForm({ company, onClose }: CompanyFormProps) {
                 <Input
                   value={form.country}
                   onChange={e => set('country', e.target.value)}
-                  placeholder="France"
+                  placeholder="Algérie"
                   className="mt-1"
                 />
               </div>

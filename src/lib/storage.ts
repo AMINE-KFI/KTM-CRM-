@@ -7,9 +7,9 @@ const defaultSettings: ReminderSettings = {
   firstReminderDays: 7,
   secondReminderDays: 14,
   thirdReminderDays: 30,
-  senderName: 'Service Comptabilité KATAMINE',
-  senderEmail: 'comptabilite@katamine.com',
-  companyName: 'KATAMINE',
+  senderName: 'Service Comptabilité KL TOOLS',
+  senderEmail: 'comptabilite@kltools.com',
+  companyName: 'KL TOOLS',
 };
 
 const defaultData: CRMData = {
@@ -18,15 +18,15 @@ const defaultData: CRMData = {
       id: 'demo-1',
       name: 'TECHNO SOLUTIONS SAS',
       legalForm: 'SAS',
-      siret: '123 456 789 00010',
-      tvaNumber: 'FR12345678900',
-      registrationNumber: 'RCS Paris B 123 456 789',
+      nif: '000012345678900',
+      nis: '123456789012345',
+      rc: '12/00-0123456 B 20',
       address: '15 Rue de la République',
       city: 'Paris',
       postalCode: '75001',
       country: 'France',
       fiscalYear: '01/01 - 31/12',
-      nafCode: '6201Z',
+      art: '1201234567',
       capital: '50 000 €',
       email: 'contact@technosolutions.fr',
       phone: '01 23 45 67 89',
@@ -66,8 +66,8 @@ const defaultData: CRMData = {
       id: 'demo-2',
       name: 'DISTRIBUTION PLUS SARL',
       legalForm: 'SARL',
-      siret: '987 654 321 00015',
-      tvaNumber: 'FR98765432100',
+      nif: '000098765432100',
+      nis: '987654321098765',
       address: '42 Avenue des Champs',
       city: 'Lyon',
       postalCode: '69001',
@@ -168,9 +168,9 @@ export function generateId(): string {
 }
 
 export function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat('fr-FR', {
+  return new Intl.NumberFormat('fr-DZ', {
     style: 'currency',
-    currency: 'EUR',
+    currency: 'DZD',
   }).format(amount);
 }
 
@@ -192,7 +192,7 @@ export function getInvoiceStatusLabel(status: string): string {
   const labels: Record<string, string> = {
     paid: 'Payée',
     unpaid: 'Non payée',
-    overdue: 'En retard',
+    overdue: 'Non payée',
     pending: 'En attente',
   };
   return labels[status] || status;
@@ -242,7 +242,7 @@ function getReminderBody(
   reminderCount: number,
   settings: ReminderSettings
 ): string {
-  const formattedAmount = new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(amount);
+  const formattedAmount = new Intl.NumberFormat('fr-DZ', { style: 'currency', currency: 'DZD' }).format(amount);
   const formattedDate = new Intl.DateTimeFormat('fr-FR').format(new Date(dueDate));
   const urgency = reminderCount >= 3 ? '\n\nSans retour de votre part dans les 48h, nous nous verrons dans l\'obligation de transmettre ce dossier à notre service contentieux.' : '';
   

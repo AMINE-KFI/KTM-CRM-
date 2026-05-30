@@ -113,8 +113,7 @@ export default function Invoices() {
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="bg-gray-100">
           <TabsTrigger value="all">Toutes <TabCount count={stats.all} /></TabsTrigger>
-          <TabsTrigger value="unpaid" className="text-orange-700">Non payées <TabCount count={stats.unpaid} color="orange" /></TabsTrigger>
-          <TabsTrigger value="overdue" className="text-red-700">En retard <TabCount count={stats.overdue} color="red" /></TabsTrigger>
+          <TabsTrigger value="unpaid" className="text-red-700">Non payées <TabCount count={stats.unpaid} color="red" /></TabsTrigger>
           <TabsTrigger value="paid" className="text-green-700">Payées <TabCount count={stats.paid} color="green" /></TabsTrigger>
         </TabsList>
 
@@ -192,7 +191,10 @@ export default function Invoices() {
                             <DropdownMenuContent align="end">
                               {inv.status !== 'paid' && (
                                 <>
-                                  <DropdownMenuItem onClick={() => markAsPaid(inv.id)} className="text-green-600">
+                                  <DropdownMenuItem onClick={() => {
+                                      const date = prompt('Date de paiement (YYYY-MM-DD):', new Date().toISOString().split('T')[0]);
+                                      if (date) markAsPaid(inv.id, date);
+                                    }} className="text-green-600">
                                     ✓ Marquer comme payée
                                   </DropdownMenuItem>
                                   <DropdownMenuItem onClick={() => handleSendReminder(inv)} className="text-amber-600">
@@ -200,6 +202,15 @@ export default function Invoices() {
                                     Envoyer un rappel
                                   </DropdownMenuItem>
                                 </>
+                              )}
+                              {inv.status === 'paid' && (
+                                <DropdownMenuItem onClick={() => {
+                                    const current = inv.paidDate || new Date().toISOString().split('T')[0];
+                                    const date = prompt('Modifier la date de paiement (YYYY-MM-DD):', current);
+                                    if (date) markAsPaid(inv.id, date);
+                                  }} className="text-blue-600">
+                                  Modifier la date de paiement
+                                </DropdownMenuItem>
                               )}
                               <DropdownMenuItem
                                 onClick={() => { if (confirm('Supprimer cette facture ?')) deleteInvoice(inv.id); }}

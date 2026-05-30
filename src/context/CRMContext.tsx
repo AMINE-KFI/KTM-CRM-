@@ -17,7 +17,7 @@ interface CRMContextType {
   addInvoice: (invoice: Omit<Invoice, 'id' | 'createdAt' | 'reminderSent' | 'reminderCount'>) => Invoice;
   updateInvoice: (id: string, updates: Partial<Invoice>) => void;
   deleteInvoice: (id: string) => void;
-  markAsPaid: (id: string) => void;
+  markAsPaid: (id: string, paidDate?: string) => void;
   getInvoicesForCompany: (companyId: string) => Invoice[];
   // Reminders
   updateReminderSettings: (settings: ReminderSettings) => void;
@@ -129,12 +129,12 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
     }));
   }, []);
 
-  const markAsPaid = useCallback((id: string) => {
+  const markAsPaid = useCallback((id: string, paidDate?: string) => {
     setData(prev => ({
       ...prev,
       invoices: prev.invoices.map(inv =>
         inv.id === id
-          ? { ...inv, status: 'paid', paidDate: new Date().toISOString().split('T')[0] }
+          ? { ...inv, status: 'paid', paidDate: paidDate || new Date().toISOString().split('T')[0] }
           : inv
       ),
     }));

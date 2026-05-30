@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useCRM } from '@/context/CRMContext';
+import { formatCurrency } from '@/lib/storage';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
@@ -159,15 +160,15 @@ export default function InvoiceForm({ companyId, onClose }: InvoiceFormProps) {
             <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
               <div className="flex justify-between text-sm text-gray-600 mb-1">
                 <span>Montant HT</span>
-                <span>{parseFloat(form.amount).toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}</span>
+                <span>{formatCurrency(parseFloat(form.amount))}</span>
               </div>
               <div className="flex justify-between text-sm text-gray-600 mb-1">
                 <span>TVA {form.vatRate}%</span>
-                <span>{vatAmount.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}</span>
+                <span>{formatCurrency(vatAmount)}</span>
               </div>
               <div className="flex justify-between font-bold text-gray-900 border-t border-gray-200 pt-1">
                 <span>Total TTC</span>
-                <span>{totalAmount.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}</span>
+                <span>{formatCurrency(totalAmount)}</span>
               </div>
             </div>
           )}

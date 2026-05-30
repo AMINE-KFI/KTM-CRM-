@@ -44,7 +44,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Tableau de bord</h1>
-        <p className="text-gray-500 text-sm mt-1">Vue d'ensemble de votre CRM KATAMINE</p>
+        <p className="text-gray-500 text-sm mt-1">Vue d'ensemble de votre CRM KL TOOLS</p>
       </div>
 
       {/* Stats Grid */}
@@ -230,8 +230,8 @@ function StatCard({ label, value, icon, color, onClick }: {
 export function InvoiceStatusBadge({ status }: { status: string }) {
   const config: Record<string, { label: string; className: string }> = {
     paid: { label: 'Payée', className: 'bg-green-100 text-green-700' },
-    unpaid: { label: 'Non payée', className: 'bg-gray-100 text-gray-600' },
-    overdue: { label: 'En retard', className: 'bg-red-100 text-red-700' },
+    unpaid: { label: 'Non payée', className: 'bg-red-100 text-red-700' },
+    overdue: { label: 'Non payée', className: 'bg-red-100 text-red-700' },
     pending: { label: 'En attente', className: 'bg-yellow-100 text-yellow-700' },
   };
   const { label, className } = config[status] || { label: status, className: '' };

@@ -19,9 +19,9 @@ export interface Company {
   id: string;
   name: string;
   legalForm: string; // SARL, SAS, SA, etc.
-  siret?: string;
-  tvaNumber?: string;
-  registrationNumber?: string; // RCS
+  nif?: string; // NIF
+  nis?: string; // NIS
+  rc?: string; // Registre de Commerce
   // Address
   address: string;
   city: string;
@@ -29,7 +29,7 @@ export interface Company {
   country: string;
   // Fiscal
   fiscalYear?: string;
-  nafCode?: string;
+  art?: string;
   capital?: string;
   // Contact
   email?: string;
