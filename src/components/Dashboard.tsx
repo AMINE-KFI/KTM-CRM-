@@ -7,8 +7,9 @@ import { Button } from '@/components/ui/button';
 import {
   Building2, Users, FileText, AlertCircle,
   TrendingUp, TrendingDown, Clock, CheckCircle2,
-  Euro, AlertTriangle
+  AlertTriangle
 } from 'lucide-react';
+import type { InvoiceStatus } from '@/types';
 
 interface DashboardProps {
   onNavigate: (page: string, id?: string) => void;
@@ -171,13 +172,11 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
               recentInvoices.map(inv => (
                 <div key={inv.id} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
                   <div className="flex items-center gap-3">
-                    <div className={`p-1.5 rounded-lg ${inv.status === 'paid' ? 'bg-green-50' : inv.status === 'overdue' ? 'bg-red-50' : 'bg-gray-50'}`}>
+                    <div className={`p-1.5 rounded-lg ${inv.status === 'paid' ? 'bg-green-50' : 'bg-red-50'}`}>
                       {inv.status === 'paid' ? (
                         <CheckCircle2 className="w-4 h-4 text-green-500" />
-                      ) : inv.status === 'overdue' ? (
-                        <AlertCircle className="w-4 h-4 text-red-500" />
                       ) : (
-                        <Clock className="w-4 h-4 text-gray-400" />
+                        <AlertCircle className="w-4 h-4 text-red-500" />
                       )}
                     </div>
                     <div>
@@ -227,7 +226,7 @@ function StatCard({ label, value, icon, color, onClick }: {
   );
 }
 
-export function InvoiceStatusBadge({ status }: { status: string }) {
+export function InvoiceStatusBadge({ status }: { status: InvoiceStatus | string }) {
   const config: Record<string, { label: string; className: string }> = {
     paid: { label: 'Payée', className: 'bg-green-100 text-green-700' },
     unpaid: { label: 'Non payée', className: 'bg-red-100 text-red-700' },
