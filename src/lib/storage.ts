@@ -1,4 +1,4 @@
-import type { CRMData, ReminderSettings } from '../types';
+import type { CRMData, ReminderSettings, Product, Quote, Deal, Task, Note } from '../types';
 
 const STORAGE_KEY = 'katamine_crm_data';
 
@@ -47,99 +47,54 @@ const defaultData: CRMData = {
           companyId: 'demo-1',
           createdAt: new Date(Date.now() - 85 * 24 * 60 * 60 * 1000).toISOString(),
         },
-        {
-          id: 'c-2',
-          firstName: 'Pierre',
-          lastName: 'MARTIN',
-          email: 'p.martin@technosolutions.fr',
-          phone: '01 23 45 67 91',
-          mobile: '06 98 76 54 32',
-          position: 'Comptable Fournisseurs',
-          department: 'comptabilite',
-          notes: 'Envoyer les factures par email uniquement',
-          companyId: 'demo-1',
-          createdAt: new Date(Date.now() - 85 * 24 * 60 * 60 * 1000).toISOString(),
-        },
       ],
-    },
-    {
-      id: 'demo-2',
-      name: 'DISTRIBUTION PLUS SARL',
-      legalForm: 'SARL',
-      nif: '000098765432100',
-      nis: '987654321098765',
-      address: '42 Avenue des Champs',
-      city: 'Lyon',
-      postalCode: '69001',
-      country: 'France',
-      email: 'info@distributionplus.fr',
-      phone: '04 56 78 90 12',
-      capital: '20 000 €',
-      createdAt: new Date(Date.now() - 45 * 24 * 60 * 60 * 1000).toISOString(),
-      contacts: [
-        {
-          id: 'c-3',
-          firstName: 'Sophie',
-          lastName: 'BERNARD',
-          email: 'sophie.b@distributionplus.fr',
-          phone: '04 56 78 90 13',
-          position: 'Directrice Achat',
-          department: 'direction',
-          companyId: 'demo-2',
-          createdAt: new Date(Date.now() - 40 * 24 * 60 * 60 * 1000).toISOString(),
-        },
-      ],
-    },
+    }
   ],
-  invoices: [
+  invoices: [],
+  products: [
     {
-      id: 'inv-1',
-      invoiceNumber: 'FAC-2024-001',
-      companyId: 'demo-1',
-      issueDate: new Date(Date.now() - 45 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-      dueDate: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-      amount: 5000,
-      vatAmount: 1000,
-      totalAmount: 6000,
-      status: 'overdue',
-      description: 'Prestation de service - Mois de Mars 2024',
-      reminderSent: true,
-      reminderCount: 2,
-      lastReminderDate: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-      createdAt: new Date(Date.now() - 45 * 24 * 60 * 60 * 1000).toISOString(),
-    },
-    {
-      id: 'inv-2',
-      invoiceNumber: 'FAC-2024-002',
-      companyId: 'demo-1',
-      issueDate: new Date(Date.now() - 20 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-      dueDate: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-      amount: 3500,
-      vatAmount: 700,
-      totalAmount: 4200,
-      status: 'unpaid',
-      description: 'Fourniture de matériel - Avril 2024',
-      reminderSent: false,
-      reminderCount: 0,
-      createdAt: new Date(Date.now() - 20 * 24 * 60 * 60 * 1000).toISOString(),
-    },
-    {
-      id: 'inv-3',
-      invoiceNumber: 'FAC-2024-003',
-      companyId: 'demo-2',
-      issueDate: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-      dueDate: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-      amount: 12000,
-      vatAmount: 2400,
-      totalAmount: 14400,
-      status: 'paid',
-      description: 'Contrat annuel maintenance',
-      reminderSent: false,
-      reminderCount: 0,
-      paidDate: new Date(Date.now() - 6 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-      createdAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
-    },
+      id: 'prod-1',
+      name: 'Prestation de service - Journée',
+      description: 'Consulting technique (par jour)',
+      price: 50000,
+      prices: {
+        katamine: 50000,
+        kltools: 45000
+      },
+      vatRate: 19,
+      createdAt: new Date(Date.now() - 100 * 24 * 60 * 60 * 1000).toISOString(),
+    }
   ],
+  quotes: [],
+  deals: [],
+  tasks: [],
+  employees: [
+    {
+      id: 'emp-admin-katamine',
+      firstName: 'Directeur',
+      lastName: 'Katamine',
+      email: 'dg@katamine.dz',
+      password: '12345',
+      role: 'admin',
+      permissions: ['dashboard', 'companies', 'pipeline', 'quotes', 'invoices', 'products', 'tasks', 'team', 'settings'],
+      tenant: 'katamine',
+      createdAt: new Date().toISOString(),
+    },
+    {
+      id: 'emp-admin-kltools',
+      firstName: 'Directeur',
+      lastName: 'KL Tools',
+      email: 'dg@kltools.dz',
+      password: '12345',
+      role: 'admin',
+      permissions: ['dashboard', 'companies', 'pipeline', 'quotes', 'invoices', 'products', 'tasks', 'team', 'settings'],
+      tenant: 'kltools',
+      createdAt: new Date().toISOString(),
+    }
+  ],
+  activityLogs: [],
+  currentUserId: null,
+  currentTenant: null,
   reminderSettings: defaultSettings,
 };
 
@@ -147,7 +102,36 @@ export function loadData(): CRMData {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored) {
-      return JSON.parse(stored);
+      const parsed = JSON.parse(stored);
+      // migrations for old data
+      if (!parsed.employees) parsed.employees = defaultData.employees;
+      if (!parsed.activityLogs) parsed.activityLogs = [];
+      
+      // Clean up old mock data that didn't have a tenant (to avoid duplicate ID conflicts and old data)
+      parsed.employees = parsed.employees.filter((e: any) => 
+        e.tenant || e.email.includes('@katamine.dz') || e.email.includes('@kltools.dz')
+      );
+
+      // Force user to login again for testing login page
+      parsed.currentUserId = null;
+      parsed.currentTenant = null;
+      
+      // Update missing passwords on load
+      parsed.employees = parsed.employees.map((e: any) => ({
+        ...e,
+        password: e.password || '12345',
+        permissions: e.permissions || (e.role === 'admin' ? defaultData.employees[0].permissions : defaultData.employees[1].permissions)
+      }));
+
+      // Ensure both default admins exist if missing
+      if (!parsed.employees.find((e: any) => e.email === 'dg@katamine.dz')) {
+        parsed.employees.push(defaultData.employees[0]);
+      }
+      if (!parsed.employees.find((e: any) => e.email === 'dg@kltools.dz')) {
+        parsed.employees.push(defaultData.employees[1]);
+      }
+
+      return parsed;
     }
   } catch (e) {
     console.error('Error loading data:', e);
@@ -178,6 +162,15 @@ export function formatDate(dateStr: string): string {
   if (!dateStr) return '-';
   const date = new Date(dateStr);
   return new Intl.DateTimeFormat('fr-FR').format(date);
+}
+
+export function formatDateTime(dateStr: string): string {
+  if (!dateStr) return '-';
+  const date = new Date(dateStr);
+  return new Intl.DateTimeFormat('fr-FR', {
+    dateStyle: 'short',
+    timeStyle: 'short',
+  }).format(date);
 }
 
 export function getDaysOverdue(dueDate: string): number {

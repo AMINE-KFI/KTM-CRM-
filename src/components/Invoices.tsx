@@ -136,8 +136,8 @@ export default function Invoices() {
                 return (
                   <Card key={inv.id} className={`border shadow-sm ${inv.status === 'overdue' ? 'border-red-200 bg-red-50/30' : 'border-gray-100'}`}>
                     <CardContent className="p-4">
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="flex items-start gap-3 flex-1 min-w-0">
+                      <div className="flex flex-col sm:flex-row items-start justify-between gap-4">
+                        <div className="flex items-start gap-3 flex-1 w-full min-w-0">
                           <div className={`p-2 rounded-lg flex-shrink-0 mt-0.5 ${
                             inv.status === 'paid' ? 'bg-green-50' :
                             inv.status === 'overdue' ? 'bg-red-50' : 'bg-gray-50'
@@ -152,33 +152,33 @@ export default function Invoices() {
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 flex-wrap">
-                              <span className="font-semibold text-gray-900">{inv.invoiceNumber}</span>
+                              <span className="font-semibold text-gray-900 truncate">{inv.invoiceNumber}</span>
                               <InvoiceStatusBadge status={inv.status} />
                               {inv.reminderSent && inv.reminderCount > 0 && (
-                                <span className="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full font-medium">
+                                <span className="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full font-medium whitespace-nowrap">
                                   {inv.reminderCount} rappel{inv.reminderCount > 1 ? 's' : ''} envoyé{inv.reminderCount > 1 ? 's' : ''}
                                 </span>
                               )}
                             </div>
-                            <p className="text-sm font-medium text-gray-700 mt-0.5">{inv.company?.name}</p>
+                            <p className="text-sm font-medium text-gray-700 mt-0.5 truncate">{inv.company?.name}</p>
                             {inv.description && <p className="text-xs text-gray-400 mt-0.5 truncate">{inv.description}</p>}
                             <div className="flex flex-wrap gap-3 mt-1.5 text-xs text-gray-400">
                               <span>Émise: {formatDate(inv.issueDate)}</span>
                               <span>Échéance: {formatDate(inv.dueDate)}</span>
                               {daysOverdue > 0 && (
-                                <span className="text-red-500 font-semibold">⚠ {daysOverdue} jour{daysOverdue > 1 ? 's' : ''} de retard</span>
+                                <span className="text-red-500 font-semibold whitespace-nowrap">⚠ {daysOverdue} jour{daysOverdue > 1 ? 's' : ''} de retard</span>
                               )}
                               {inv.paidDate && (
-                                <span className="text-green-600">✓ Payée le {formatDate(inv.paidDate)}</span>
+                                <span className="text-green-600 whitespace-nowrap">✓ Payée le {formatDate(inv.paidDate)}</span>
                               )}
                               {inv.lastReminderDate && (
-                                <span className="text-amber-600">Dernier rappel: {formatDate(inv.lastReminderDate)}</span>
+                                <span className="text-amber-600 whitespace-nowrap">Dernier rappel: {formatDate(inv.lastReminderDate)}</span>
                               )}
                             </div>
                           </div>
                         </div>
-                        <div className="flex items-center gap-3 flex-shrink-0">
-                          <div className="text-right">
+                        <div className="flex items-center justify-between w-full sm:w-auto sm:justify-end gap-3 flex-shrink-0 border-t border-gray-100 sm:border-0 pt-3 sm:pt-0">
+                          <div className="text-left sm:text-right">
                             <p className="font-bold text-gray-900">{formatCurrency(inv.totalAmount)}</p>
                             <p className="text-xs text-gray-400">HT: {formatCurrency(inv.amount)}</p>
                           </div>

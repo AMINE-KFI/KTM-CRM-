@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   ArrowLeft, Building2, Edit, Trash2, Plus, Phone, Mail, Globe,
-  MapPin, FileText, Users, CreditCard, MoreVertical, User
+  MapPin, FileText, Users, CreditCard, MoreVertical, User, MessageSquare
 } from 'lucide-react';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger
@@ -33,24 +33,33 @@ const DEPT_COLORS: Record<string, string> = {
 };
 
 export default function CompanyDetail({ companyId, onBack }: CompanyDetailProps) {
-  const { data, getCompany, deleteCompany, getInvoicesForCompany, deleteContact, markAsPaid, deleteInvoice } = useCRM();
+  const { data, getCompany, deleteCompany, getInvoicesForCompany, deleteContact, markAsPaid, deleteInvoice, addNote, deleteNote } = useCRM();
   const company = getCompany(companyId);
   const [showEditForm, setShowEditForm] = useState(false);
   const [showContactForm, setShowContactForm] = useState(false);
   const [editContact, setEditContact] = useState<Contact | null>(null);
   const [showInvoiceForm, setShowInvoiceForm] = useState(false);
+  const [newNote, setNewNote] = useState('');
 
   if (!company) return null;
 
   const invoices = getInvoicesForCompany(companyId);
   const unpaidInvoices = invoices.filter(i => i.status !== 'paid');
   const totalUnpaid = unpaidInvoices.reduce((s, i) => s + i.totalAmount, 0);
+  
+  const notes = (data.notes || []).filter(n => n.companyId === companyId).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
   const handleDeleteCompany = () => {
     if (confirm(`Supprimer l'entreprise "${company.name}" et toutes ses données ?`)) {
       deleteCompany(companyId);
       onBack();
     }
+  };
+
+  const handleAddNote = () => {
+    if (!newNote.trim()) return;
+    addNote({ content: newNote.trim(), companyId });
+    setNewNote('');
   };
 
   return (
@@ -63,30 +72,30 @@ export default function CompanyDetail({ companyId, onBack }: CompanyDetailProps)
         </Button>
       </div>
 
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex items-start gap-4">
+      <div className="flex flex-col sm:flex-row items-start justify-between gap-4">
+        <div className="flex items-start gap-4 w-full sm:w-auto">
           <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-white font-bold text-2xl flex-shrink-0">
             {company.name.charAt(0)}
           </div>
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">{company.name}</h1>
+          <div className="min-w-0 flex-1">
+            <h1 className="text-xl sm:text-2xl font-bold text-gray-900 truncate">{company.name}</h1>
             <div className="flex items-center gap-2 mt-1 flex-wrap">
-              <span className="text-sm text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">{company.legalForm}</span>
-              {company.city && <span className="text-sm text-gray-400">{company.city}, {company.country}</span>}
+              <span className="text-xs sm:text-sm text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full whitespace-nowrap">{company.legalForm}</span>
+              {company.city && <span className="text-xs sm:text-sm text-gray-400 truncate">{company.city}, {company.country}</span>}
               {unpaidInvoices.length > 0 && (
-                <span className="text-sm text-red-600 bg-red-50 px-2 py-0.5 rounded-full font-medium">
+                <span className="text-xs sm:text-sm text-red-600 bg-red-50 px-2 py-0.5 rounded-full font-medium whitespace-nowrap">
                   {formatCurrency(totalUnpaid)} impayé
                 </span>
               )}
             </div>
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 w-full sm:w-auto justify-end border-t border-gray-100 sm:border-0 pt-3 sm:pt-0">
           <Button variant="outline" size="sm" onClick={() => setShowEditForm(true)} className="gap-2">
-            <Edit className="w-4 h-4" /> Modifier
+            <Edit className="w-4 h-4" /> <span className="hidden sm:inline">Modifier</span>
           </Button>
           <Button variant="outline" size="sm" onClick={handleDeleteCompany} className="text-red-600 hover:bg-red-50 border-red-200 gap-2">
-            <Trash2 className="w-4 h-4" />
+            <Trash2 className="w-4 h-4" /> <span className="hidden sm:inline">Supprimer</span>
           </Button>
         </div>
       </div>
@@ -105,6 +114,12 @@ export default function CompanyDetail({ companyId, onBack }: CompanyDetailProps)
             <FileText className="w-4 h-4" /> Factures
             {invoices.length > 0 && (
               <span className="ml-1 bg-blue-100 text-blue-600 text-xs px-1.5 py-0.5 rounded-full">{invoices.length}</span>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="notes" className="gap-2">
+            <MessageSquare className="w-4 h-4" /> Notes
+            {notes.length > 0 && (
+              <span className="ml-1 bg-blue-100 text-blue-600 text-xs px-1.5 py-0.5 rounded-full">{notes.length}</span>
             )}
           </TabsTrigger>
         </TabsList>
@@ -208,23 +223,23 @@ export default function CompanyDetail({ companyId, onBack }: CompanyDetailProps)
                 .map(inv => (
                   <Card key={inv.id} className="border border-gray-100 shadow-sm">
                     <CardContent className="p-4">
-                      <div className="flex items-start justify-between">
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="font-semibold text-gray-900">{inv.invoiceNumber}</span>
+                      <div className="flex flex-col sm:flex-row items-start justify-between gap-4">
+                        <div className="flex-1 w-full min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-semibold text-gray-900 truncate">{inv.invoiceNumber}</span>
                             <InvoiceStatusBadge status={inv.status} />
                           </div>
-                          <p className="text-sm text-gray-500 mt-1">{inv.description || 'Sans description'}</p>
-                          <div className="flex gap-3 mt-2 text-xs text-gray-400">
+                          <p className="text-sm text-gray-500 mt-1 truncate">{inv.description || 'Sans description'}</p>
+                          <div className="flex flex-wrap gap-3 mt-2 text-xs text-gray-400">
                             <span>Émise: {formatDate(inv.issueDate)}</span>
                             <span>Échéance: {formatDate(inv.dueDate)}</span>
                             {inv.status !== 'paid' && getDaysOverdue(inv.dueDate) > 0 && (
-                              <span className="text-red-500 font-medium">{getDaysOverdue(inv.dueDate)}j de retard</span>
+                              <span className="text-red-500 font-medium whitespace-nowrap">{getDaysOverdue(inv.dueDate)}j de retard</span>
                             )}
                           </div>
                         </div>
-                        <div className="flex items-center gap-3">
-                          <div className="text-right">
+                        <div className="flex items-center justify-between w-full sm:w-auto sm:justify-end gap-3 border-t border-gray-100 sm:border-0 pt-3 sm:pt-0">
+                          <div className="text-left sm:text-right">
                             <p className="font-bold text-gray-900">{formatCurrency(inv.totalAmount)}</p>
                             <p className="text-xs text-gray-400">HT: {formatCurrency(inv.amount)}</p>
                           </div>
@@ -264,6 +279,52 @@ export default function CompanyDetail({ companyId, onBack }: CompanyDetailProps)
                     </CardContent>
                   </Card>
                 ))}
+            </div>
+          )}
+        </TabsContent>
+
+        {/* Notes Tab */}
+        <TabsContent value="notes" className="mt-4">
+          <div className="flex justify-between items-center mb-4">
+            <p className="text-sm text-gray-500">{notes.length} note{notes.length > 1 ? 's' : ''}</p>
+          </div>
+          
+          <div className="bg-white p-4 rounded-xl border border-gray-200 mb-6 shadow-sm">
+            <h3 className="text-sm font-semibold text-gray-800 mb-2">Ajouter une note</h3>
+            <textarea
+              className="w-full border border-gray-200 rounded-lg p-3 text-sm min-h-[100px] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+              placeholder="Compte-rendu d'appel, remarque importante..."
+              value={newNote}
+              onChange={(e) => setNewNote(e.target.value)}
+            />
+            <div className="flex justify-end mt-2">
+              <Button size="sm" onClick={handleAddNote} disabled={!newNote.trim()} className="bg-blue-600 text-white">
+                Enregistrer la note
+              </Button>
+            </div>
+          </div>
+
+          {notes.length === 0 ? (
+            <div className="text-center py-12 border-2 border-dashed border-gray-200 rounded-xl">
+              <MessageSquare className="w-10 h-10 text-gray-200 mx-auto mb-2" />
+              <p className="text-gray-400">Aucune note pour cette entreprise</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {notes.map(note => (
+                <div key={note.id} className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm relative group">
+                  <p className="text-sm text-gray-800 whitespace-pre-wrap">{note.content}</p>
+                  <p className="text-xs text-gray-400 mt-2">Le {formatDate(note.createdAt)}</p>
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    onClick={() => { if(confirm('Supprimer cette note ?')) deleteNote(note.id); }}
+                    className="absolute top-2 right-2 text-gray-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8 p-0"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                </div>
+              ))}
             </div>
           )}
         </TabsContent>
@@ -315,40 +376,40 @@ function ContactCard({ contact, onEdit, onDelete }: { contact: Contact; onEdit: 
   return (
     <Card className="border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
       <CardContent className="p-4">
-        <div className="flex items-start justify-between">
-          <div className="flex items-start gap-3">
+        <div className="flex flex-col sm:flex-row items-start justify-between gap-4">
+          <div className="flex items-start gap-3 w-full min-w-0">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-400 to-violet-600 flex items-center justify-center text-white font-bold flex-shrink-0">
               {contact.firstName.charAt(0)}{contact.lastName.charAt(0)}
             </div>
-            <div>
+            <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="font-semibold text-gray-900">{contact.firstName} {contact.lastName}</span>
-                <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${DEPT_COLORS[contact.department] || 'bg-gray-100 text-gray-600'}`}>
+                <span className="font-semibold text-gray-900 truncate">{contact.firstName} {contact.lastName}</span>
+                <span className={`text-xs px-2 py-0.5 rounded-full font-medium whitespace-nowrap ${DEPT_COLORS[contact.department] || 'bg-gray-100 text-gray-600'}`}>
                   {getDepartmentLabel(contact.department)}
                 </span>
               </div>
-              <p className="text-sm text-gray-500 mt-0.5">{contact.position}</p>
+              <p className="text-sm text-gray-500 mt-0.5 truncate">{contact.position}</p>
               <div className="flex flex-wrap gap-3 mt-1.5">
                 {contact.email && (
-                  <a href={`mailto:${contact.email}`} className="text-xs text-blue-600 hover:underline flex items-center gap-1">
-                    <Mail className="w-3 h-3" /> {contact.email}
+                  <a href={`mailto:${contact.email}`} className="text-xs text-blue-600 hover:underline flex items-center gap-1 truncate">
+                    <Mail className="w-3 h-3 flex-shrink-0" /> <span className="truncate">{contact.email}</span>
                   </a>
                 )}
                 {contact.phone && (
-                  <a href={`tel:${contact.phone}`} className="text-xs text-blue-600 hover:underline flex items-center gap-1">
-                    <Phone className="w-3 h-3" /> {contact.phone}
+                  <a href={`tel:${contact.phone}`} className="text-xs text-blue-600 hover:underline flex items-center gap-1 whitespace-nowrap">
+                    <Phone className="w-3 h-3 flex-shrink-0" /> {contact.phone}
                   </a>
                 )}
                 {contact.mobile && (
-                  <a href={`tel:${contact.mobile}`} className="text-xs text-gray-500 flex items-center gap-1">
-                    <Phone className="w-3 h-3" /> {contact.mobile} (mob.)
+                  <a href={`tel:${contact.mobile}`} className="text-xs text-gray-500 flex items-center gap-1 whitespace-nowrap">
+                    <Phone className="w-3 h-3 flex-shrink-0" /> {contact.mobile} (mob.)
                   </a>
                 )}
               </div>
-              {contact.notes && <p className="text-xs text-gray-400 mt-1 italic">{contact.notes}</p>}
+              {contact.notes && <p className="text-xs text-gray-400 mt-1 italic line-clamp-2">{contact.notes}</p>}
             </div>
           </div>
-          <div className="flex gap-1">
+          <div className="flex gap-1 w-full sm:w-auto justify-end border-t border-gray-100 sm:border-0 pt-3 sm:pt-0">
             <Button variant="ghost" size="sm" onClick={onEdit} className="h-8 w-8 p-0 text-gray-400 hover:text-blue-600">
               <Edit className="w-4 h-4" />
             </Button>

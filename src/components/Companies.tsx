@@ -87,18 +87,18 @@ export default function Companies() {
                 onClick={() => setSelectedCompanyId(company.id)}
               >
                 <CardContent className="p-4">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex items-start gap-4 flex-1 min-w-0">
+                  <div className="flex flex-col sm:flex-row items-start justify-between gap-4">
+                    <div className="flex items-start gap-4 flex-1 w-full min-w-0">
                       {/* Logo placeholder */}
                       <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-white font-bold text-lg flex-shrink-0">
                         {company.name.charAt(0)}
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <h3 className="font-semibold text-gray-900">{company.name}</h3>
-                          <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">{company.legalForm}</span>
+                          <h3 className="font-semibold text-gray-900 truncate">{company.name}</h3>
+                          <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full whitespace-nowrap">{company.legalForm}</span>
                           {unpaid > 0 && (
-                            <span className="text-xs text-red-600 bg-red-50 px-2 py-0.5 rounded-full font-medium">
+                            <span className="text-xs text-red-600 bg-red-50 px-2 py-0.5 rounded-full font-medium whitespace-nowrap">
                               {unpaid} impayée{unpaid > 1 ? 's' : ''}
                             </span>
                           )}
@@ -110,19 +110,19 @@ export default function Companies() {
                             </span>
                           )}
                           {company.city && (
-                            <span className="text-xs text-gray-500 flex items-center gap-1">
-                              <MapPin className="w-3 h-3" />
+                            <span className="text-xs text-gray-500 flex items-center gap-1 truncate">
+                              <MapPin className="w-3 h-3 flex-shrink-0" />
                               {company.city}, {company.postalCode}
                             </span>
                           )}
                           {company.phone && (
                             <span className="text-xs text-gray-500 flex items-center gap-1">
-                              <Phone className="w-3 h-3" />
+                              <Phone className="w-3 h-3 flex-shrink-0" />
                               {company.phone}
                             </span>
                           )}
                           {company.email && (
-                            <span className="text-xs text-gray-500 flex items-center gap-1 truncate max-w-[200px]">
+                            <span className="text-xs text-gray-500 flex items-center gap-1 truncate">
                               <Mail className="w-3 h-3 flex-shrink-0" />
                               {company.email}
                             </span>
@@ -130,8 +130,8 @@ export default function Companies() {
                         </div>
                       </div>
                     </div>
-                    <div className="flex items-center gap-4 flex-shrink-0">
-                      <div className="hidden sm:flex gap-4 text-center">
+                    <div className="flex items-center justify-between w-full sm:w-auto sm:justify-end gap-4 border-t border-gray-100 sm:border-0 pt-3 sm:pt-0">
+                      <div className="flex gap-4 text-center">
                         <div>
                           <p className="text-lg font-bold text-gray-900">{company.contacts.length}</p>
                           <p className="text-[10px] text-gray-400 flex items-center gap-0.5"><Users className="w-3 h-3" /> Contacts</p>
