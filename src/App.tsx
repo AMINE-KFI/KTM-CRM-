@@ -10,7 +10,8 @@ import Tasks from './components/Tasks';
 import Team from './components/Team';
 import SettingsPage from './components/SettingsPage';
 import Login from './components/Login';
-import { LayoutDashboard, Building2, FileText, Settings, Menu, X, Package, Target, CheckSquare, FileSignature, Users, LogOut } from 'lucide-react';
+import NotificationPopup from './components/NotificationPopup';
+import { LayoutDashboard, Building2, FileText, Settings, Menu, X, Package, Target, CheckSquare, FileSignature, Users, LogOut, Bell } from 'lucide-react';
 
 type Page = 'dashboard' | 'companies' | 'pipeline' | 'quotes' | 'invoices' | 'products' | 'tasks' | 'team' | 'settings';
 
@@ -18,6 +19,7 @@ function AppLayout() {
   const { currentUser, currentTenant, setCurrentUserId, setCurrentTenant } = useCRM();
   const [page, setPage] = useState<Page>('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [showPopup, setShowPopup] = useState(true);
 
   // If no user is logged in, show Login screen
   if (!currentUser) {
@@ -143,6 +145,13 @@ function AppLayout() {
               {currentUser.firstName.charAt(0)}{currentUser.lastName.charAt(0)}
             </div>
             <button 
+              onClick={() => setShowPopup(true)}
+              className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors relative"
+              title="Notifications"
+            >
+              <Bell className="w-5 h-5" />
+            </button>
+            <button 
               onClick={handleLogout}
               className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
               title="Se déconnecter"
@@ -157,6 +166,10 @@ function AppLayout() {
           {renderPage()}
         </div>
       </main>
+
+      {showPopup && (
+        <NotificationPopup onClose={() => setShowPopup(false)} />
+      )}
     </div>
   );
 }

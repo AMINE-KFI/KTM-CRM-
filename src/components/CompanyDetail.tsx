@@ -1,13 +1,13 @@
 import { useState } from 'react';
 import { useCRM } from '@/context/CRMContext';
-import type { Contact } from '@/types';
+import type { Contact, Deal } from '@/types';
 import { formatCurrency, formatDate, getDepartmentLabel, getDaysOverdue } from '@/lib/storage';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   ArrowLeft, Building2, Edit, Trash2, Plus, Phone, Mail, Globe,
-  FileText, Users, MoreVertical, MessageSquare
+  FileText, Users, MoreVertical, MessageSquare, Target
 } from 'lucide-react';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger
@@ -15,6 +15,7 @@ import {
 import CompanyForm from './CompanyForm';
 import ContactForm from './ContactForm';
 import InvoiceForm from './InvoiceForm';
+import DealForm from './DealForm';
 import { InvoiceStatusBadge } from './Dashboard';
 
 interface CompanyDetailProps {
@@ -38,6 +39,8 @@ export default function CompanyDetail({ companyId, onBack }: CompanyDetailProps)
   const [showContactForm, setShowContactForm] = useState(false);
   const [editContact, setEditContact] = useState<Contact | null>(null);
   const [showInvoiceForm, setShowInvoiceForm] = useState(false);
+  const [showDealForm, setShowDealForm] = useState(false);
+  const [editDeal, setEditDeal] = useState<Deal | null>(null);
   const [newNote, setNewNote] = useState('');
 
   if (!company) return null;
@@ -45,6 +48,9 @@ export default function CompanyDetail({ companyId, onBack }: CompanyDetailProps)
   const invoices = getInvoicesForCompany(companyId);
   const unpaidInvoices = invoices.filter(i => i.status !== 'paid');
   const totalUnpaid = unpaidInvoices.reduce((s, i) => s + i.totalAmount, 0);
+  
+  const deals = (data.deals || []).filter(d => d.companyId === companyId);
+  const quotes = (data.quotes || []).filter(q => q.companyId === companyId);
   
   const notes = (data.notes || []).filter(n => n.companyId === companyId).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
@@ -107,6 +113,18 @@ export default function CompanyDetail({ companyId, onBack }: CompanyDetailProps)
             <Users className="w-4 h-4" /> Contacts
             {company.contacts.length > 0 && (
               <span className="ml-1 bg-blue-100 text-blue-600 text-xs px-1.5 py-0.5 rounded-full">{company.contacts.length}</span>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="deals" className="gap-2">
+            <Target className="w-4 h-4" /> Dossiers
+            {deals.length > 0 && (
+              <span className="ml-1 bg-blue-100 text-blue-600 text-xs px-1.5 py-0.5 rounded-full">{deals.length}</span>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="quotes" className="gap-2">
+            <FileText className="w-4 h-4" /> Devis
+            {quotes.length > 0 && (
+              <span className="ml-1 bg-blue-100 text-blue-600 text-xs px-1.5 py-0.5 rounded-full">{quotes.length}</span>
             )}
           </TabsTrigger>
           <TabsTrigger value="invoices" className="gap-2">
@@ -197,6 +215,115 @@ export default function CompanyDetail({ companyId, onBack }: CompanyDetailProps)
                     }
                   }}
                 />
+              ))}
+            </div>
+          )}
+        </TabsContent>
+
+        {/* Deals Tab */}
+        <TabsContent value="deals" className="mt-4">
+          <div className="flex justify-between items-center mb-4">
+            <p className="text-sm text-gray-500">{deals.length} dossier{deals.length > 1 ? 's' : ''}</p>
+            <Button size="sm" onClick={() => { setEditDeal(null); setShowDealForm(true); }} className="bg-blue-600 hover:bg-blue-700 text-white gap-2">
+              <Plus className="w-4 h-4" /> Nouveau dossier
+            </Button>
+          </div>
+          {deals.length === 0 ? (
+            <div className="text-center py-12 border-2 border-dashed border-gray-200 rounded-xl">
+              <Target className="w-10 h-10 text-gray-200 mx-auto mb-2" />
+              <p className="text-gray-400">Aucun dossier pour cette entreprise</p>
+            </div>
+          ) : (
+            <div className="grid gap-3">
+              {deals.map(deal => {
+                const stageLabels: Record<string, string> = {
+                  lead: 'Piste',
+                  proposal: 'Proposition envoyée',
+                  negotiation: 'En négociation',
+                  won: 'Gagné',
+                  lost: 'Perdu'
+                };
+                return (
+                <Card key={deal.id} className="border border-gray-100 shadow-sm relative group">
+                  <div className="absolute right-3 top-3 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <Button variant="ghost" size="sm" onClick={() => { setEditDeal(deal); setShowDealForm(true); }} className="h-8 w-8 p-0 text-gray-400 hover:text-blue-600">
+                      <Edit className="w-4 h-4" />
+                    </Button>
+                  </div>
+                  <CardContent className="p-4">
+                    <div className="flex justify-between items-start">
+                      <div className="w-full pr-8">
+                        <h4 className="font-semibold text-gray-900 text-lg">{deal.title}</h4>
+                        <div className="text-sm text-gray-500 mt-2 flex items-center gap-2 flex-wrap">
+                          <span className="bg-blue-50 text-blue-700 px-2.5 py-0.5 rounded-full font-medium border border-blue-100">Phase: {stageLabels[deal.stage] || deal.stage}</span>
+                          {deal.value > 0 && <span className="bg-green-50 text-green-700 px-2.5 py-0.5 rounded-full font-medium border border-green-100">Valeur: {formatCurrency(deal.value)}</span>}
+                          {deal.expectedCloseDate && <span className="bg-gray-100 px-2.5 py-0.5 rounded-full border border-gray-200 text-gray-600">Prévu pour le {formatDate(deal.expectedCloseDate)}</span>}
+                        </div>
+                        
+                        {deal.contactIds && deal.contactIds.length > 0 && (
+                          <div className="mt-4">
+                            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Contacts liés</p>
+                            <div className="flex flex-wrap gap-2">
+                              {company.contacts
+                                .filter(c => deal.contactIds?.includes(c.id))
+                                .map(contact => (
+                                  <div key={contact.id} className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 text-sm">
+                                    <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-xs">
+                                      {contact.firstName.charAt(0)}{contact.lastName.charAt(0)}
+                                    </div>
+                                    <div>
+                                      <span className="font-medium text-gray-800">{contact.firstName} {contact.lastName}</span>
+                                      {contact.position && <span className="text-gray-500 text-xs ml-1">({contact.position})</span>}
+                                    </div>
+                                  </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {deal.notes && (
+                          <div className="mt-4 bg-yellow-50/50 border border-yellow-100 rounded-lg p-3">
+                            <p className="text-xs font-semibold text-yellow-800 uppercase tracking-wider mb-1">Notes / Informations</p>
+                            <p className="text-sm text-gray-700 whitespace-pre-wrap">{deal.notes}</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+                );
+              })}
+            </div>
+          )}
+        </TabsContent>
+
+        {/* Quotes Tab */}
+        <TabsContent value="quotes" className="mt-4">
+          <div className="flex justify-between items-center mb-4">
+            <p className="text-sm text-gray-500">{quotes.length} devis</p>
+          </div>
+          {quotes.length === 0 ? (
+            <div className="text-center py-12 border-2 border-dashed border-gray-200 rounded-xl">
+              <FileText className="w-10 h-10 text-gray-200 mx-auto mb-2" />
+              <p className="text-gray-400">Aucun devis pour cette entreprise</p>
+            </div>
+          ) : (
+            <div className="grid gap-3">
+              {quotes.map(quote => (
+                <Card key={quote.id} className="border border-gray-100 shadow-sm">
+                  <CardContent className="p-4">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <h4 className="font-semibold text-gray-900">{quote.quoteNumber}</h4>
+                        <div className="text-sm text-gray-500 mt-1 flex items-center gap-2 flex-wrap">
+                          <span className="bg-gray-100 px-2 py-0.5 rounded-full">Statut: {quote.status}</span>
+                          <span className="text-gray-900 font-medium">Total: {formatCurrency(quote.totalAmount)}</span>
+                          <span>Échéance: {formatDate(quote.expiryDate)}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
               ))}
             </div>
           )}
@@ -344,6 +471,13 @@ export default function CompanyDetail({ companyId, onBack }: CompanyDetailProps)
         <InvoiceForm
           companyId={companyId}
           onClose={() => setShowInvoiceForm(false)}
+        />
+      )}
+      {showDealForm && (
+        <DealForm
+          deal={editDeal || undefined}
+          defaultCompanyId={companyId}
+          onClose={() => { setShowDealForm(false); setEditDeal(null); }}
         />
       )}
     </div>

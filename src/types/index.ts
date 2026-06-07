@@ -116,6 +116,7 @@ export interface Deal {
   expectedCloseDate?: string;
   notes?: string;
   assigneeIds?: string[];
+  contactIds?: string[];
   tenant?: TenantType;
   createdAt: string;
 }
@@ -174,6 +175,7 @@ export interface CRMData {
   notes: Note[];
   employees: Employee[];
   activityLogs: ActivityLog[];
+  readNotifications: Record<string, string[]>;
   currentUserId: string | null;
   currentTenant: TenantType | null;
 }

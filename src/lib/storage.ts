@@ -68,6 +68,7 @@ const defaultData: CRMData = {
   quotes: [],
   deals: [],
   tasks: [],
+  notes: [],
   employees: [
     {
       id: 'emp-admin-katamine',
@@ -93,6 +94,7 @@ const defaultData: CRMData = {
     }
   ],
   activityLogs: [],
+  readNotifications: {},
   currentUserId: null,
   currentTenant: null,
   reminderSettings: defaultSettings,
@@ -106,6 +108,7 @@ export function loadData(): CRMData {
       // migrations for old data
       if (!parsed.employees) parsed.employees = defaultData.employees;
       if (!parsed.activityLogs) parsed.activityLogs = [];
+      if (!parsed.readNotifications) parsed.readNotifications = {};
       
       // Clean up old mock data that didn't have a tenant (to avoid duplicate ID conflicts and old data)
       parsed.employees = parsed.employees.filter((e: any) => 
@@ -205,7 +208,6 @@ export function getDepartmentLabel(dept: string): string {
 
 // Simulate sending reminder email (in real app, would call backend API)
 export function sendReminderEmail(
-  companyName: string,
   contactEmail: string,
   invoiceNumber: string,
   amount: number,
@@ -214,7 +216,7 @@ export function sendReminderEmail(
   settings: ReminderSettings
 ): string {
   const subject = getReminderSubject(invoiceNumber, reminderCount);
-  const body = getReminderBody(companyName, invoiceNumber, amount, dueDate, reminderCount, settings);
+  const body = getReminderBody(invoiceNumber, amount, dueDate, reminderCount, settings);
   
   // Create mailto link for simulation
   const mailtoLink = `mailto:${contactEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
@@ -228,7 +230,6 @@ function getReminderSubject(invoiceNumber: string, reminderCount: number): strin
 }
 
 function getReminderBody(
-  companyName: string,
   invoiceNumber: string,
   amount: number,
   dueDate: string,

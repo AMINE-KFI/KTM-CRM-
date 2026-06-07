@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import type { CRMData, Company, Contact, Invoice, ReminderSettings, Product, Quote, Deal, Task, Note, Employee, TenantType } from '../types';
+import type { CRMData, Company, Contact, Invoice, ReminderSettings, Product, Quote, Deal, Task, Note, Employee, TenantType, ActivityLog } from '../types';
 import { loadData, saveData, generateId } from '../lib/storage';
 
 interface CRMContextType {
@@ -13,6 +13,9 @@ interface CRMContextType {
   updateEmployee: (id: string, updates: Partial<Employee>) => void;
   deleteEmployee: (id: string) => void;
   
+  // Notifications
+  setNotificationRead: (notificationId: string, isRead: boolean) => void;
+
   // Companies
   addCompany: (company: Omit<Company, 'id' | 'createdAt' | 'contacts'>) => Company;
   updateCompany: (id: string, updates: Partial<Company>) => void;
@@ -379,6 +382,26 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
     notes: data.notes || [],
   };
 
+  const setNotificationRead = useCallback((notificationId: string, isRead: boolean) => {
+    setData(prev => {
+      const userId = prev.currentUserId;
+      if (!userId) return prev;
+      
+      const currentReads = prev.readNotifications[userId] || [];
+      const newReads = isRead 
+        ? (currentReads.includes(notificationId) ? currentReads : [...currentReads, notificationId])
+        : currentReads.filter(id => id !== notificationId);
+        
+      return {
+        ...prev,
+        readNotifications: {
+          ...prev.readNotifications,
+          [userId]: newReads
+        }
+      };
+    });
+  }, []);
+
   return (
     <CRMContext.Provider value={{
       data: tenantData,
@@ -394,7 +417,8 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
       addQuote, updateQuote, deleteQuote, convertQuoteToInvoice,
       addDeal, updateDeal, deleteDeal,
       addTask, updateTask, deleteTask,
-      addNote, deleteNote, addActivityLog
+      addNote, deleteNote, addActivityLog,
+      setNotificationRead
     }}>
       {children}
     </CRMContext.Provider>

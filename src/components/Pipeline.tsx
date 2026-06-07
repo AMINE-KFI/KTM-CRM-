@@ -6,6 +6,8 @@ import { Button } from '@/components/ui/button';
 import { Plus, Target, Users, X } from 'lucide-react';
 import type { DealStage, Deal, Employee } from '@/types';
 
+import DealForm from './DealForm';
+
 const STAGES: { id: DealStage; label: string; color: string }[] = [
   { id: 'lead', label: 'Piste', color: 'bg-gray-100 border-gray-200' },
   { id: 'proposal', label: 'Proposition envoyée', color: 'bg-blue-50 border-blue-100' },
@@ -15,8 +17,10 @@ const STAGES: { id: DealStage; label: string; color: string }[] = [
 ];
 
 export default function Pipeline() {
-  const { data, addDeal, updateDeal, currentUser, addActivityLog } = useCRM();
+  const { data, updateDeal, currentUser, addActivityLog } = useCRM();
   const [managingDeal, setManagingDeal] = useState<Deal | null>(null);
+  const [showDealForm, setShowDealForm] = useState(false);
+  const [editDeal, setEditDeal] = useState<Deal | null>(null);
 
   const isAdmin = currentUser?.role === 'admin';
 
@@ -41,24 +45,7 @@ export default function Pipeline() {
   }, [data, currentUser, isAdmin]);
 
   const handleAddDeal = () => {
-    const title = prompt('Titre de l\'opportunité :');
-    if (!title) return;
-    const valueStr = prompt('Valeur estimée :');
-    const value = parseFloat(valueStr || '0');
-    
-    const companyId = data.companies[0]?.id; 
-    if (!companyId) {
-      alert("Créez d'abord une entreprise !");
-      return;
-    }
-
-    addDeal({
-      title,
-      value,
-      stage: 'lead',
-      companyId,
-      assigneeIds: isAdmin ? [] : [currentUser!.id] // Automatically assign to the creator if employee
-    });
+    setShowDealForm(true);
   };
 
   const moveDeal = (dealId: string, newStage: DealStage) => {
@@ -166,6 +153,13 @@ export default function Pipeline() {
             updateDeal(managingDeal.id, { assigneeIds: ids });
             setManagingDeal(null);
           }}
+        />
+      )}
+
+      {showDealForm && (
+        <DealForm 
+          deal={editDeal || undefined} 
+          onClose={() => { setShowDealForm(false); setEditDeal(null); }} 
         />
       )}
     </div>

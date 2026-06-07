@@ -61,7 +61,6 @@ export default function Invoices() {
     const newCount = (inv.reminderCount || 0) + 1;
     
     const mailtoLink = sendReminderEmail(
-      inv.company?.name || '',
       email,
       inv.invoiceNumber,
       inv.totalAmount,

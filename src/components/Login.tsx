@@ -109,13 +109,6 @@ export default function Login() {
             </div>
           </form>
           
-          <div className="mt-6 border-t border-gray-100 pt-6">
-            <p className="text-xs text-center text-gray-500">
-              Comptes démo par défaut :<br/>
-              Katamine: <b>dg@katamine.dz</b> / <b>12345</b><br/>
-              KL Tools: <b>dg@kltools.dz</b> / <b>12345</b>
-            </p>
-          </div>
         </div>
       </div>
     </div>

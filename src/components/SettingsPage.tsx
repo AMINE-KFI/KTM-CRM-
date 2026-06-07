@@ -52,7 +52,6 @@ export default function SettingsPage() {
       
       if (email) {
         const mailtoLink = sendReminderEmail(
-          inv.company?.name || '',
           email,
           inv.invoiceNumber,
           inv.totalAmount,

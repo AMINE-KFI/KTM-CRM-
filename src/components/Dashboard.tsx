@@ -194,7 +194,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
 
 function NotificationFeed({ data, onNavigate, overdueInvoices }: { data: any, onNavigate: any, overdueInvoices: any[] }) {
   const notifications = useMemo(() => {
-    const items = [];
+    const items: any[] = [];
 
     // 1. Overdue Invoices
     overdueInvoices.forEach(inv => {
