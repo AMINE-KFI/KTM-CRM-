@@ -4,11 +4,10 @@ import type { Contact } from '@/types';
 import { formatCurrency, formatDate, getDepartmentLabel, getDaysOverdue } from '@/lib/storage';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   ArrowLeft, Building2, Edit, Trash2, Plus, Phone, Mail, Globe,
-  MapPin, FileText, Users, CreditCard, MoreVertical, User, MessageSquare
+  FileText, Users, MoreVertical, MessageSquare
 } from 'lucide-react';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger

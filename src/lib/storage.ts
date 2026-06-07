@@ -1,4 +1,4 @@
-import type { CRMData, ReminderSettings, Product, Quote, Deal, Task, Note } from '../types';
+import type { CRMData, ReminderSettings } from '../types';
 
 const STORAGE_KEY = 'katamine_crm_data';
 

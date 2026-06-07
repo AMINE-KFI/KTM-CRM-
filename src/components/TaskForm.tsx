@@ -13,7 +13,7 @@ export default function TaskForm({ onClose }: TaskFormProps) {
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [date, setDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [time, setTime] = useState('09:00');
   const [assigneeId, setAssigneeId] = useState(currentUser?.id || '');
   const [companyId, setCompanyId] = useState('');

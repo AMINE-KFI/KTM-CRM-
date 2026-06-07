@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useCRM } from '@/context/CRMContext';
-import { formatCurrency, formatDate } from '@/lib/storage';
+import { formatCurrency } from '@/lib/storage';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Plus, Target, Users, X } from 'lucide-react';

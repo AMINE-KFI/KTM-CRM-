@@ -15,7 +15,7 @@ import { LayoutDashboard, Building2, FileText, Settings, Menu, X, Package, Targe
 type Page = 'dashboard' | 'companies' | 'pipeline' | 'quotes' | 'invoices' | 'products' | 'tasks' | 'team' | 'settings';
 
 function AppLayout() {
-  const { data, currentUser, currentTenant, setCurrentUserId, setCurrentTenant } = useCRM();
+  const { currentUser, currentTenant, setCurrentUserId, setCurrentTenant } = useCRM();
   const [page, setPage] = useState<Page>('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(false);
 

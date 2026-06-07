@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useCRM } from '@/context/CRMContext';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Plus, Trash2, ShieldAlert, Edit, CheckSquare, X } from 'lucide-react';
+import { Plus, Trash2, ShieldAlert, Edit, X } from 'lucide-react';
 import { formatDate } from '@/lib/storage';
 import type { Employee } from '@/types';
 

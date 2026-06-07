@@ -17,19 +17,20 @@ interface InvoiceFormProps {
 export default function InvoiceForm({ companyId, onClose }: InvoiceFormProps) {
   const { addInvoice, data } = useCRM();
 
-  const today = new Date().toISOString().split('T')[0];
-  const in30 = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-
-  const [form, setForm] = useState({
-    companyId: companyId || '',
-    invoiceNumber: `FAC-${new Date().getFullYear()}-${String(data.invoices.length + 1).padStart(3, '0')}`,
-    issueDate: today,
-    dueDate: in30,
-    amount: '',
-    vatRate: '20',
-    description: '',
-    status: 'unpaid' as InvoiceStatus,
-    notes: '',
+  const [form, setForm] = useState(() => {
+    const today = new Date().toISOString().split('T')[0];
+    const in30 = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    return {
+      companyId: companyId || '',
+      invoiceNumber: `FAC-${new Date().getFullYear()}-${String(data.invoices.length + 1).padStart(3, '0')}`,
+      issueDate: today,
+      dueDate: in30,
+      amount: '',
+      vatRate: '20',
+      description: '',
+      status: 'unpaid' as InvoiceStatus,
+      notes: '',
+    };
   });
 
   const set = (field: string, value: string) => setForm(prev => ({ ...prev, [field]: value }));

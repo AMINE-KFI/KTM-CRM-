@@ -6,10 +6,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Slider } from '@/components/ui/slider';
-import { Settings, Mail, Bell, Save, CheckCircle, AlertCircle } from 'lucide-react';
+import { Mail, Bell, Save, CheckCircle, AlertCircle } from 'lucide-react';
 import type { ReminderSettings } from '@/types';
 import { formatCurrency, getDaysOverdue, sendReminderEmail } from '@/lib/storage';
-import { InvoiceStatusBadge } from './Dashboard';
 
 export default function SettingsPage() {
   const { data, updateReminderSettings, updateInvoice, getOverdueInvoices } = useCRM();

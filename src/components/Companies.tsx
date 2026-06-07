@@ -1,12 +1,11 @@
 import { useState } from 'react';
 import { useCRM } from '@/context/CRMContext';
 import type { Company } from '@/types';
-import { formatDate, getDepartmentLabel } from '@/lib/storage';
+
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
-import { Building2, Plus, Search, Users, FileText, Phone, Mail, Globe, MapPin, ChevronRight } from 'lucide-react';
+import { Building2, Plus, Search, Users, FileText, Phone, Mail, MapPin, ChevronRight } from 'lucide-react';
 import CompanyForm from './CompanyForm';
 import CompanyDetail from './CompanyDetail';
 
@@ -20,7 +19,8 @@ export default function Companies() {
   const filtered = data.companies.filter(c =>
     c.name.toLowerCase().includes(search.toLowerCase()) ||
     c.city.toLowerCase().includes(search.toLowerCase()) ||
-    (c.siret && c.siret.includes(search))
+    (c.rc && c.rc.includes(search)) ||
+    (c.nif && c.nif.includes(search))
   );
 
   if (selectedCompanyId) {
@@ -104,9 +104,9 @@ export default function Companies() {
                           )}
                         </div>
                         <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1.5">
-                          {company.siret && (
+                          {company.rc && (
                             <span className="text-xs text-gray-500 flex items-center gap-1">
-                              SIRET: {company.siret}
+                              RC: {company.rc}
                             </span>
                           )}
                           {company.city && (

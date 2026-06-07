@@ -2,7 +2,6 @@ import { useMemo } from 'react';
 import { useCRM } from '@/context/CRMContext';
 import { formatCurrency, formatDate, getDaysOverdue } from '@/lib/storage';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
   Building2, Users, FileText, AlertCircle,

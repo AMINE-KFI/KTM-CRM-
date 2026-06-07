@@ -3,7 +3,7 @@ import { useCRM } from '@/context/CRMContext';
 import { formatDateTime } from '@/lib/storage';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Plus, CheckCircle2, Circle, Clock, Trash2, Calendar as CalendarIcon, User } from 'lucide-react';
+import { Plus, CheckCircle2, Circle, Clock, Trash2, User } from 'lucide-react';
 import TaskForm from './TaskForm';
 
 export default function Tasks() {
