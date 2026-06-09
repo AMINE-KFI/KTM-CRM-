@@ -57,7 +57,8 @@ export default function SettingsPage() {
           inv.totalAmount,
           inv.dueDate,
           newCount,
-          settings
+          settings,
+          inv.issueDate
         );
         window.open(mailtoLink, '_blank');
       }

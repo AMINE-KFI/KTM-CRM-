@@ -9,11 +9,13 @@ import { FileText, Plus, Search, CheckCircle2, Clock, XCircle, MoreVertical, Fil
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu';
+import QuoteForm from './QuoteForm';
 
 export default function Quotes() {
   const { data, convertQuoteToInvoice, deleteQuote, updateQuote } = useCRM();
   const [search, setSearch] = useState('');
   const [activeTab, setActiveTab] = useState('all');
+  const [showForm, setShowForm] = useState(false);
 
   const enrichedQuotes = useMemo(() => {
     return (data.quotes || [])
@@ -69,7 +71,7 @@ export default function Quotes() {
           <h1 className="text-2xl font-bold text-gray-900">Devis</h1>
           <p className="text-gray-500 text-sm mt-0.5">{(data.quotes || []).length} devis au total</p>
         </div>
-        <Button className="bg-blue-600 hover:bg-blue-700 text-white gap-2">
+        <Button onClick={() => setShowForm(true)} className="bg-blue-600 hover:bg-blue-700 text-white gap-2">
           <Plus className="w-4 h-4" /> Nouveau devis
         </Button>
       </div>
@@ -164,6 +166,7 @@ export default function Quotes() {
           )}
         </TabsContent>
       </Tabs>
+      {showForm && <QuoteForm onClose={() => setShowForm(false)} />}
     </div>
   );
 }

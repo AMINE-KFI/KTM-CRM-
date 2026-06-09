@@ -66,7 +66,8 @@ export default function Invoices() {
       inv.totalAmount,
       inv.dueDate,
       newCount,
-      data.reminderSettings
+      data.reminderSettings,
+      inv.issueDate
     );
     
     updateInvoice(inv.id, {

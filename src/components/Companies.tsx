@@ -5,16 +5,44 @@ import type { Company } from '@/types';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Building2, Plus, Search, Users, FileText, Phone, Mail, MapPin, ChevronRight } from 'lucide-react';
+import { Building2, Plus, Search, Users, FileText, Phone, Mail, MapPin, ChevronRight, Upload, Download, FileSpreadsheet } from 'lucide-react';
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator
+} from '@/components/ui/dropdown-menu';
 import CompanyForm from './CompanyForm';
 import CompanyDetail from './CompanyDetail';
+import { exportCompaniesToExcel, parseCompaniesExcel, downloadCompanyTemplate } from '@/lib/excel';
+import { exportCompaniesToPDF } from '@/lib/pdf';
+import { useRef } from 'react';
 
 export default function Companies() {
-  const { data } = useCRM();
+  const { data, addCompany } = useCRM();
   const [search, setSearch] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null);
   const [editCompany, setEditCompany] = useState<Company | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleImportExcel = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const importedCompanies = await parseCompaniesExcel(file);
+      if (importedCompanies.length === 0) {
+        alert("Aucun client trouvé dans le fichier.");
+        return;
+      }
+      if (confirm(`Vous allez importer ${importedCompanies.length} clients. Continuer ?`)) {
+        importedCompanies.forEach(comp => addCompany(comp as any));
+        alert('Importation réussie !');
+      }
+    } catch (err) {
+      alert("Erreur lors de la lecture du fichier Excel.");
+      console.error(err);
+    }
+    // Reset file input
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
 
   const filtered = data.companies.filter(c =>
     c.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -40,13 +68,49 @@ export default function Companies() {
           <h1 className="text-2xl font-bold text-gray-900">Entreprises</h1>
           <p className="text-gray-500 text-sm mt-0.5">{data.companies.length} client{data.companies.length > 1 ? 's' : ''} enregistré{data.companies.length > 1 ? 's' : ''}</p>
         </div>
-        <Button
-          onClick={() => { setEditCompany(null); setShowForm(true); }}
-          className="bg-blue-600 hover:bg-blue-700 text-white gap-2"
-        >
-          <Plus className="w-4 h-4" />
-          Nouvelle entreprise
-        </Button>
+        <div className="flex items-center gap-2">
+          <input
+            type="file"
+            accept=".xlsx, .xls"
+            className="hidden"
+            ref={fileInputRef}
+            onChange={handleImportExcel}
+          />
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" className="gap-2">
+                Actions <ChevronRight className="w-4 h-4 rotate-90" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuItem onClick={() => fileInputRef.current?.click()} className="cursor-pointer">
+                <Upload className="w-4 h-4 mr-2 text-blue-600" />
+                Importer Excel
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={downloadCompanyTemplate} className="cursor-pointer">
+                <FileSpreadsheet className="w-4 h-4 mr-2 text-green-600" />
+                Modèle d'importation
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => exportCompaniesToExcel(data.companies)} className="cursor-pointer">
+                <Download className="w-4 h-4 mr-2 text-green-600" />
+                Exporter Excel
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => exportCompaniesToPDF(data.companies)} className="cursor-pointer">
+                <FileText className="w-4 h-4 mr-2 text-red-600" />
+                Exporter PDF
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          <Button
+            onClick={() => { setEditCompany(null); setShowForm(true); }}
+            className="bg-blue-600 hover:bg-blue-700 text-white gap-2"
+          >
+            <Plus className="w-4 h-4" />
+            Nouvelle entreprise
+          </Button>
+        </div>
       </div>
 
       {/* Search */}

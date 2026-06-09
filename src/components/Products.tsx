@@ -4,14 +4,38 @@ import { formatCurrency, formatDate } from '@/lib/storage';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Package, Plus, Search, MoreVertical, Edit2 } from 'lucide-react';
+import { Package, Plus, Search, MoreVertical, Edit2, Upload, Download, FileSpreadsheet, ChevronRight, FileText } from 'lucide-react';
 import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator
 } from '@/components/ui/dropdown-menu';
+import { exportProductsToExcel, parseProductsExcel, downloadProductTemplate } from '@/lib/excel';
+import { exportProductsToPDF } from '@/lib/pdf';
+import { useRef } from 'react';
 
 export default function Products() {
   const { data, currentTenant, addProduct, updateProduct, deleteProduct } = useCRM();
   const [search, setSearch] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleImportExcel = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const importedProducts = await parseProductsExcel(file);
+      if (importedProducts.length === 0) {
+        alert("Aucun produit trouvé dans le fichier.");
+        return;
+      }
+      if (confirm(`Vous allez importer ${importedProducts.length} produits. Continuer ?`)) {
+        importedProducts.forEach(prod => addProduct(prod as any));
+        alert('Importation réussie !');
+      }
+    } catch (err) {
+      alert("Erreur lors de la lecture du fichier Excel.");
+      console.error(err);
+    }
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
   
   const filtered = (data.products || []).filter(p => 
     p.name.toLowerCase().includes(search.toLowerCase()) || 
@@ -66,9 +90,45 @@ export default function Products() {
           <h1 className="text-2xl font-bold text-gray-900">Catalogue</h1>
           <p className="text-gray-500 text-sm mt-0.5">Partagé avec toutes les entités</p>
         </div>
-        <Button onClick={handleAdd} className={`text-white gap-2 ${currentTenant === 'katamine' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-yellow-500 hover:bg-yellow-600'}`}>
-          <Plus className="w-4 h-4" /> Ajouter
-        </Button>
+        <div className="flex items-center gap-2">
+          <input
+            type="file"
+            accept=".xlsx, .xls"
+            className="hidden"
+            ref={fileInputRef}
+            onChange={handleImportExcel}
+          />
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" className="gap-2">
+                Actions <ChevronRight className="w-4 h-4 rotate-90" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuItem onClick={() => fileInputRef.current?.click()} className="cursor-pointer">
+                <Upload className="w-4 h-4 mr-2 text-blue-600" />
+                Importer Excel
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={downloadProductTemplate} className="cursor-pointer">
+                <FileSpreadsheet className="w-4 h-4 mr-2 text-green-600" />
+                Modèle d'importation
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => exportProductsToExcel(data.products || [])} className="cursor-pointer">
+                <Download className="w-4 h-4 mr-2 text-green-600" />
+                Exporter Excel
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => exportProductsToPDF(data.products || [], currentTenant)} className="cursor-pointer">
+                <FileText className="w-4 h-4 mr-2 text-red-600" />
+                Exporter PDF
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          <Button onClick={handleAdd} className={`text-white gap-2 ${currentTenant === 'katamine' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-yellow-500 hover:bg-yellow-600'}`}>
+            <Plus className="w-4 h-4" /> Ajouter
+          </Button>
+        </div>
       </div>
 
       <div className="relative">

@@ -213,10 +213,11 @@ export function sendReminderEmail(
   amount: number,
   dueDate: string,
   reminderCount: number,
-  settings: ReminderSettings
+  settings: ReminderSettings,
+  issueDate?: string
 ): string {
   const subject = getReminderSubject(invoiceNumber, reminderCount);
-  const body = getReminderBody(invoiceNumber, amount, dueDate, reminderCount, settings);
+  const body = getReminderBody(invoiceNumber, amount, dueDate, reminderCount, settings, issueDate);
   
   // Create mailto link for simulation
   const mailtoLink = `mailto:${contactEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
@@ -233,26 +234,25 @@ function getReminderBody(
   invoiceNumber: string,
   amount: number,
   dueDate: string,
-  reminderCount: number,
-  settings: ReminderSettings
+  _reminderCount: number,
+  settings: ReminderSettings,
+  issueDate?: string
 ): string {
-  const formattedAmount = new Intl.NumberFormat('fr-DZ', { style: 'currency', currency: 'DZD' }).format(amount);
-  const formattedDate = new Intl.DateTimeFormat('fr-FR').format(new Date(dueDate));
-  const urgency = reminderCount >= 3 ? '\n\nSans retour de votre part dans les 48h, nous nous verrons dans l\'obligation de transmettre ce dossier à notre service contentieux.' : '';
+  const formattedAmount = new Intl.NumberFormat('fr-DZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount);
+  const dateToUse = issueDate ? new Date(issueDate) : new Date(dueDate);
+  const formattedDate = new Intl.DateTimeFormat('fr-FR').format(dateToUse);
   
-  return `Madame, Monsieur,
+  return `Bonjour Messieurs
+         Nous vous demandons de bien vouloir, faire le nécessaire, afin de procéder au règlement de la créance se rapportant à notre facture ci-après non encore honorée à savoir:
+* N°: ${invoiceNumber} du ${formattedDate} de ${formattedAmount} DA/TTC
 
-Sauf erreur ou omission de notre part, nous constatons que notre facture n° ${invoiceNumber} d'un montant de ${formattedAmount}, dont l'échéance était fixée au ${formattedDate}, n'a pas encore été réglée.
+         Dans l'attente de vous lire, et d'un prompt règlement, de votre part, recevez nos meilleures et sincères salutations.
+Cordialement votre
 
-Nous vous serions reconnaissants de bien vouloir régulariser votre situation dans les meilleurs délais.
+ Le Service recouvrement
+ ${settings.companyName}
 
-Si le règlement a été effectué, veuillez ne pas tenir compte de ce rappel.${urgency}
 
-Pour tout renseignement complémentaire, n'hésitez pas à contacter notre service comptabilité.
 
-Cordialement,
-
-${settings.senderName}
-${settings.companyName}
-Email: ${settings.senderEmail}`;
+NB: Veuillez SVP, nous accuser la bonne réception de ce message - merci`;
 }
