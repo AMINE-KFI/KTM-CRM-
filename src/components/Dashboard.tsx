@@ -8,7 +8,7 @@ import {
   TrendingUp, TrendingDown, Clock, CheckCircle2,
   AlertTriangle
 } from 'lucide-react';
-import type { InvoiceStatus } from '@/types';
+
 
 interface DashboardProps {
   onNavigate: (page: string, id?: string) => void;
@@ -22,23 +22,26 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
   const totalPaid = getTotalPaid();
   
   const stats = useMemo(() => {
-    const totalCompanies = data.companies.length;
+    const totalCompanies = data.companies.filter(c => c.role === 'client' || !c.role || c.role === 'both').length;
     const totalContacts = data.companies.reduce((sum, c) => sum + c.contacts.length, 0);
-    const totalInvoices = data.invoices.length;
-    const unpaidInvoices = data.invoices.filter(i => i.status !== 'paid').length;
+    const erpInvoices = (data.documents || []).filter((d: any) => d.type === 'invoice');
+    const totalInvoices = erpInvoices.length;
+    const unpaidInvoices = erpInvoices.filter((i: any) => i.status !== 'paid').length;
     const pipelineValue = (data.deals || []).filter(d => d.stage !== 'lost' && d.stage !== 'won').reduce((sum, d) => sum + d.value, 0);
-    const pendingQuotes = (data.quotes || []).filter(q => q.status === 'sent').length;
+    const pendingQuotes = (data.documents || []).filter((d: any) => d.type === 'proforma' && (d.status === 'draft' || d.status === 'validated')).length;
     
     return { totalCompanies, totalContacts, totalInvoices, unpaidInvoices, pipelineValue, pendingQuotes };
   }, [data]);
 
   const recentInvoices = useMemo(() => {
-    return [...data.invoices]
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    const erpInvoices = (data.documents || []).filter((d: any) => d.type === 'invoice');
+    return [...erpInvoices]
+      .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
       .slice(0, 5)
-      .map(inv => ({
+      .map((inv: any) => ({
         ...inv,
-        company: data.companies.find(c => c.id === inv.companyId),
+        invoiceNumber: inv.reference,
+        company: data.companies.find((c: any) => c.id === inv.companyId),
       }));
   }, [data]);
 
@@ -71,7 +74,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
           value={stats.pendingQuotes}
           icon={<FileText className="w-5 h-5 text-indigo-600" />}
           color="indigo"
-          onClick={() => onNavigate('quotes')}
+          onClick={() => onNavigate('documents')}
         />
         <StatCard
           label="Contacts"
@@ -85,14 +88,14 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
           value={stats.totalInvoices}
           icon={<FileText className="w-5 h-5 text-emerald-600" />}
           color="emerald"
-          onClick={() => onNavigate('invoices')}
+          onClick={() => onNavigate('documents')}
         />
         <StatCard
           label="Impayées"
           value={stats.unpaidInvoices}
           icon={<AlertCircle className="w-5 h-5 text-red-600" />}
           color="red"
-          onClick={() => onNavigate('invoices')}
+          onClick={() => onNavigate('documents')}
         />
       </div>
 
@@ -152,7 +155,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
                 <FileText className="w-4 h-4 text-emerald-500" />
                 Factures récentes
               </CardTitle>
-              <Button variant="ghost" size="sm" className="text-xs text-blue-600" onClick={() => onNavigate('invoices')}>
+              <Button variant="ghost" size="sm" className="text-xs text-blue-600" onClick={() => onNavigate('documents')}>
                 Voir tout
               </Button>
             </div>
@@ -204,9 +207,9 @@ function NotificationFeed({ data, onNavigate, overdueInvoices }: { data: any, on
         type: 'danger',
         icon: <AlertTriangle className="w-4 h-4 text-red-600" />,
         title: 'Facture en retard',
-        description: `Facture ${inv.invoiceNumber} (${inv.company?.name}) est en retard de ${days} jour(s).`,
+        description: `Facture ${inv.invoiceNumber || inv.reference} (${inv.company?.name}) est en retard de ${days} jour(s).`,
         date: new Date(inv.dueDate),
-        action: () => onNavigate('invoices')
+        action: () => onNavigate('documents')
       });
     });
 
@@ -315,7 +318,7 @@ function StatCard({ label, value, icon, color, onClick }: {
   );
 }
 
-export function InvoiceStatusBadge({ status }: { status: InvoiceStatus | string }) {
+export function InvoiceStatusBadge({ status }: { status: string }) {
   const config: Record<string, { label: string; className: string }> = {
     paid: { label: 'Payée', className: 'bg-green-100 text-green-700' },
     unpaid: { label: 'Non payée', className: 'bg-red-100 text-red-700' },

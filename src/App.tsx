@@ -2,18 +2,19 @@ import { useState } from 'react';
 import { CRMProvider, useCRM } from './context/CRMContext';
 import Dashboard from './components/Dashboard';
 import Companies from './components/Companies';
-import Invoices from './components/Invoices';
-import Quotes from './components/Quotes';
+
 import Pipeline from './components/Pipeline';
 import Products from './components/Products';
 import Tasks from './components/Tasks';
 import Team from './components/Team';
 import SettingsPage from './components/SettingsPage';
+import Documents from './components/Documents';
+import Payments from './components/Payments';
 import Login from './components/Login';
 import NotificationPopup from './components/NotificationPopup';
-import { LayoutDashboard, Building2, FileText, Settings, Menu, X, Package, Target, CheckSquare, FileSignature, Users, LogOut, Bell } from 'lucide-react';
+import { LayoutDashboard, Building2, FileText, Settings, Menu, X, Package, Target, CheckSquare, FileSignature, Users, LogOut, Bell, Truck, CreditCard } from 'lucide-react';
 
-type Page = 'dashboard' | 'companies' | 'pipeline' | 'quotes' | 'invoices' | 'products' | 'tasks' | 'team' | 'settings';
+type Page = 'dashboard' | 'companies' | 'pipeline' | 'products' | 'tasks' | 'team' | 'settings' | 'documents' | 'suppliers' | 'payments';
 
 function AppLayout() {
   const { currentUser, currentTenant, setCurrentUserId, setCurrentTenant } = useCRM();
@@ -43,8 +44,9 @@ function AppLayout() {
     { id: 'dashboard', label: 'Tableau de bord', icon: <LayoutDashboard className="w-5 h-5" /> },
     { id: 'companies', label: 'Entreprises', icon: <Building2 className="w-5 h-5" /> },
     { id: 'pipeline', label: 'Opportunités', icon: <Target className="w-5 h-5" /> },
-    { id: 'quotes', label: 'Devis', icon: <FileSignature className="w-5 h-5" /> },
-    { id: 'invoices', label: 'Factures', icon: <FileText className="w-5 h-5" /> },
+    { id: 'documents', label: 'Ventes & Achats', icon: <FileText className="w-5 h-5" /> },
+    { id: 'payments', label: 'Créances & Paiements', icon: <CreditCard className="w-5 h-5" /> },
+    { id: 'suppliers', label: 'Fournisseurs', icon: <Truck className="w-5 h-5" /> },
     { id: 'products', label: 'Catalogue', icon: <Package className="w-5 h-5" /> },
     { id: 'tasks', label: 'Tâches', icon: <CheckSquare className="w-5 h-5" /> },
     { id: 'team', label: 'Mon Équipe', icon: <Users className="w-5 h-5" />, adminOnly: true },
@@ -64,10 +66,11 @@ function AppLayout() {
 
     switch (page) {
       case 'dashboard': return <Dashboard onNavigate={navigate} />;
-      case 'companies': return <Companies />;
+      case 'companies': return <Companies role="client" />;
       case 'pipeline': return <Pipeline />;
-      case 'quotes': return <Quotes />;
-      case 'invoices': return <Invoices />;
+      case 'documents': return <Documents />;
+      case 'payments': return <Payments />;
+      case 'suppliers': return <Companies role="supplier" />;
       case 'products': return <Products />;
       case 'tasks': return <Tasks />;
       case 'team': return isAdmin ? <Team /> : <Dashboard onNavigate={navigate} />;
@@ -128,10 +131,16 @@ function AppLayout() {
               <Menu className="w-6 h-6" />
             </button>
             <div className="flex items-center gap-2">
-              <div className={`w-7 h-7 rounded-lg bg-gradient-to-br ${theme.gradient} flex items-center justify-center text-white font-bold text-sm`}>
-                {theme.short}
-              </div>
-              <span className="font-bold text-gray-900 text-sm">{theme.name}</span>
+              {theme.name === 'KATAMINE' ? (
+                <img src="/logo-katamine.png" alt="Katamine Logo" className="h-6 w-auto object-contain" />
+              ) : (
+                <>
+                  <div className={`w-7 h-7 rounded-lg bg-gradient-to-br ${theme.gradient} flex items-center justify-center text-white font-bold text-sm`}>
+                    {theme.short}
+                  </div>
+                  <span className="font-bold text-gray-900 text-sm">{theme.name}</span>
+                </>
+              )}
             </div>
           </div>
           <div className="hidden lg:block" /> {/* Spacer */}
@@ -142,7 +151,7 @@ function AppLayout() {
               <p className="text-xs text-gray-500">{isAdmin ? 'Gérant' : 'Employé'}</p>
             </div>
             <div className={`w-10 h-10 rounded-full ${theme.avatarBg} ${theme.textActive} flex items-center justify-center font-bold`}>
-              {currentUser.firstName.charAt(0)}{currentUser.lastName.charAt(0)}
+              {(currentUser.firstName || 'U').charAt(0)}{(currentUser.lastName || '').charAt(0)}
             </div>
             <button 
               onClick={() => setShowPopup(true)}
@@ -180,13 +189,19 @@ function SidebarContent({ page, navigate, navItems, theme }: { page: Page; navig
       {/* Logo */}
       <div className="p-6 border-b border-gray-50">
         <div className="flex items-center gap-3">
-          <div className={`w-9 h-9 rounded-xl bg-gradient-to-br ${theme.gradient} flex items-center justify-center text-white font-bold text-lg shadow-sm`}>
-            {theme.short}
-          </div>
-          <div>
-            <p className="font-bold text-gray-900 leading-tight">{theme.name}</p>
-            <p className="text-[11px] text-gray-400 leading-tight">CRM Clients</p>
-          </div>
+          {theme.name === 'KATAMINE' ? (
+            <img src="/logo-katamine.png" alt="Katamine Logo" className="h-8 w-auto object-contain" />
+          ) : (
+            <>
+              <div className={`w-9 h-9 rounded-xl bg-gradient-to-br ${theme.gradient} flex items-center justify-center text-white font-bold text-lg shadow-sm`}>
+                {theme.short}
+              </div>
+              <div>
+                <p className="font-bold text-gray-900 leading-tight">{theme.name}</p>
+                <p className="text-[11px] text-gray-400 leading-tight">CRM Clients</p>
+              </div>
+            </>
+          )}
         </div>
       </div>
 

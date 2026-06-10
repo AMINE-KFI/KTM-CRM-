@@ -15,7 +15,7 @@ import { exportCompaniesToExcel, parseCompaniesExcel, downloadCompanyTemplate } 
 import { exportCompaniesToPDF } from '@/lib/pdf';
 import { useRef } from 'react';
 
-export default function Companies() {
+export default function Companies({ role = 'client' }: { role?: 'client' | 'supplier' }) {
   const { data, addCompany } = useCRM();
   const [search, setSearch] = useState('');
   const [showForm, setShowForm] = useState(false);
@@ -44,12 +44,18 @@ export default function Companies() {
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  const filtered = data.companies.filter(c =>
-    c.name.toLowerCase().includes(search.toLowerCase()) ||
-    c.city.toLowerCase().includes(search.toLowerCase()) ||
-    (c.rc && c.rc.includes(search)) ||
-    (c.nif && c.nif.includes(search))
-  );
+  const filtered = data.companies.filter(c => {
+    const isRoleMatch = role === 'supplier' 
+      ? (c.role === 'supplier' || c.role === 'both') 
+      : (c.role === 'client' || !c.role || c.role === 'both');
+    
+    if (!isRoleMatch) return false;
+
+    return c.name.toLowerCase().includes(search.toLowerCase()) ||
+           (c.city && c.city.toLowerCase().includes(search.toLowerCase())) ||
+           (c.rc && c.rc.includes(search)) ||
+           (c.nif && c.nif.includes(search));
+  });
 
   if (selectedCompanyId) {
     return (
@@ -65,8 +71,8 @@ export default function Companies() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Entreprises</h1>
-          <p className="text-gray-500 text-sm mt-0.5">{data.companies.length} client{data.companies.length > 1 ? 's' : ''} enregistré{data.companies.length > 1 ? 's' : ''}</p>
+          <h1 className="text-2xl font-bold text-gray-900">{role === 'supplier' ? 'Fournisseurs' : 'Entreprises Clientes'}</h1>
+          <p className="text-gray-500 text-sm mt-0.5">{filtered.length} {role === 'supplier' ? 'fournisseur(s)' : 'client(s)'} enregistré(s)</p>
         </div>
         <div className="flex items-center gap-2">
           <input
@@ -108,7 +114,7 @@ export default function Companies() {
             className="bg-blue-600 hover:bg-blue-700 text-white gap-2"
           >
             <Plus className="w-4 h-4" />
-            Nouvelle entreprise
+            {role === 'supplier' ? 'Nouveau fournisseur' : 'Nouvelle entreprise'}
           </Button>
         </div>
       </div>
@@ -128,14 +134,14 @@ export default function Companies() {
       {filtered.length === 0 ? (
         <div className="text-center py-16">
           <Building2 className="w-12 h-12 text-gray-200 mx-auto mb-3" />
-          <p className="text-gray-400 font-medium">Aucune entreprise trouvée</p>
-          <p className="text-gray-300 text-sm mt-1">Créez votre première entreprise cliente</p>
+          <p className="text-gray-400 font-medium">Aucun {role === 'supplier' ? 'fournisseur' : 'client'} trouvé</p>
+          <p className="text-gray-300 text-sm mt-1">Créez votre premier enregistrement</p>
           <Button
             variant="outline"
             className="mt-4"
             onClick={() => { setEditCompany(null); setShowForm(true); }}
           >
-            <Plus className="w-4 h-4 mr-2" /> Ajouter une entreprise
+            <Plus className="w-4 h-4 mr-2" /> Ajouter un {role === 'supplier' ? 'fournisseur' : 'client'}
           </Button>
         </div>
       ) : (
@@ -155,13 +161,13 @@ export default function Companies() {
                     <div className="flex items-start gap-4 flex-1 w-full min-w-0">
                       {/* Logo placeholder */}
                       <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-white font-bold text-lg flex-shrink-0">
-                        {company.name.charAt(0)}
+                        {(company.name || 'I').charAt(0)}
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <h3 className="font-semibold text-gray-900 truncate">{company.name}</h3>
-                          <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full whitespace-nowrap">{company.legalForm}</span>
-                          {unpaid > 0 && (
+                          {company.legalForm && <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full whitespace-nowrap">{company.legalForm}</span>}
+                          {unpaid > 0 && role === 'client' && (
                             <span className="text-xs text-red-600 bg-red-50 px-2 py-0.5 rounded-full font-medium whitespace-nowrap">
                               {unpaid} impayée{unpaid > 1 ? 's' : ''}
                             </span>
@@ -219,6 +225,7 @@ export default function Companies() {
       {showForm && (
         <CompanyForm
           company={editCompany || undefined}
+          defaultRole={role}
           onClose={() => { setShowForm(false); setEditCompany(null); }}
         />
       )}

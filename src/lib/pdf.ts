@@ -1,6 +1,78 @@
 import jsPDF from 'jspdf';
-import 'jspdf-autotable';
-import type { Company, Product } from '../types';
+import autoTable from 'jspdf-autotable';
+import type { Company, Product, BusinessDocument, FiscalSettings } from '../types';
+import { formatCurrency, formatDate } from './storage';
+import { KATAMINE_LOGO } from './logoBase64';
+
+const units = ['', 'un', 'deux', 'trois', 'quatre', 'cinq', 'six', 'sept', 'huit', 'neuf', 'dix', 'onze', 'douze', 'treize', 'quatorze', 'quinze', 'seize', 'dix-sept', 'dix-huit', 'dix-neuf'];
+const tens = ['', 'dix', 'vingt', 'trente', 'quarante', 'cinquante', 'soixante', 'soixante-dix', 'quatre-vingts', 'quatre-vingt-dix'];
+
+function convertLessThanOneThousand(n: number): string {
+    if (n === 0) return '';
+    let result = '';
+    
+    if (n >= 100) {
+        const hundreds = Math.floor(n / 100);
+        result += (hundreds === 1 ? 'cent' : units[hundreds] + ' cent');
+        n %= 100;
+        if (n === 0 && hundreds > 1) result += 's';
+        if (n > 0) result += ' ';
+    }
+    
+    if (n > 0) {
+        if (n < 20) {
+            result += units[n];
+        } else {
+            const ten = Math.floor(n / 10);
+            const unit = n % 10;
+            
+            if (ten === 7 || ten === 9) {
+                result += tens[ten - 1];
+                if (unit === 1 && ten === 7) result += ' et onze';
+                else if (unit === 1) result += '-onze'; 
+                else result += '-' + units[10 + unit];
+            } else {
+                result += tens[ten];
+                if (unit === 1 && ten !== 8) result += ' et un';
+                else if (unit > 0) result += '-' + units[unit];
+            }
+        }
+    }
+    return result;
+}
+
+function numberToWordsFR(n: number): string {
+    if (n === 0) return 'zéro dinar';
+    
+    const dinars = Math.floor(n);
+    const centimes = Math.round((n - dinars) * 100);
+    
+    let result = '';
+    
+    if (dinars >= 1000000) {
+        const millions = Math.floor(dinars / 1000000);
+        result += convertLessThanOneThousand(millions) + ' million' + (millions > 1 ? 's ' : ' ');
+    }
+    
+    if (dinars >= 1000) {
+        const thousands = Math.floor((dinars % 1000000) / 1000);
+        if (thousands > 0) {
+            result += (thousands === 1 ? 'mille ' : convertLessThanOneThousand(thousands) + ' mille ');
+        }
+    }
+    
+    const remainder = dinars % 1000;
+    if (remainder > 0) {
+        result += convertLessThanOneThousand(remainder);
+    }
+    
+    let finalStr = result.trim() + (dinars > 1 ? ' dinars' : ' dinar');
+    if (centimes > 0) {
+        finalStr += ' et ' + convertLessThanOneThousand(centimes) + (centimes > 1 ? ' centimes' : ' centime');
+    }
+    
+    return finalStr.charAt(0).toUpperCase() + finalStr.slice(1);
+}
 
 export function exportCompaniesToPDF(companies: Company[]) {
   const doc = new jsPDF();
@@ -79,4 +151,147 @@ export function exportProductsToPDF(products: Product[], tenant?: string | null)
   });
 
   doc.save('catalogue_export.pdf');
+}
+
+export function generateDocumentPDF(docData: BusinessDocument, company: Company, fiscalSettings?: FiscalSettings) {
+  const doc = new jsPDF();
+  const isKLTools = docData.tenant === 'kltools';
+
+  // 1. En-tête (Tenant)
+  if (isKLTools) {
+    doc.setFontSize(22);
+    doc.setTextColor('#e74c3c');
+    doc.setFont('helvetica', 'bold');
+    doc.text('KL TOOLS', 14, 25);
+  } else {
+    // Add Katamine Logo
+    doc.addImage(KATAMINE_LOGO, 'PNG', 14, 15, 47.4, 10); // x, y, width, height
+  }
+  
+  doc.setFontSize(10);
+  doc.setTextColor(100);
+  doc.setFont('helvetica', 'normal');
+  
+  let tenantInfo = '';
+  if (fiscalSettings) {
+    tenantInfo = `${fiscalSettings.address || ''}\nNIF: ${fiscalSettings.nif || '-'} | RC: ${fiscalSettings.rc || '-'}\nNIS: ${fiscalSettings.nis || '-'} | ART: ${fiscalSettings.art || '-'}\nEmail: ${fiscalSettings.email || '-'} | Tél: ${fiscalSettings.phone || '-'}`;
+  } else {
+    tenantInfo = isKLTools 
+      ? 'Equipements et Outillages\nNIF: 1234567890 | RC: KL-2023\nContact: kltools@example.com' 
+      : 'Solutions Industrielles\nNIF: 0987654321 | RC: KT-1998\nContact: contact@katamine.com';
+  }
+  doc.text(tenantInfo, 14, 32);
+
+  // 2. Info Client
+  doc.setFontSize(12);
+  doc.setTextColor(0);
+  doc.setFont('helvetica', 'bold');
+  doc.text('Client :', 120, 25);
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  doc.text(company.name, 120, 32);
+  doc.text(company.address || '', 120, 37);
+  doc.text(`${company.postalCode || ''} ${company.city || ''}`, 120, 42);
+  if (company.nif) doc.text(`NIF: ${company.nif}`, 120, 47);
+
+  // 3. Info Document
+  const docTypeLabels: Record<string, string> = {
+    invoice: 'FACTURE',
+    proforma: 'FACTURE PROFORMA',
+    delivery_note: 'BON DE LIVRAISON',
+    purchase_order: 'BON DE COMMANDE'
+  };
+
+  doc.setFontSize(16);
+  doc.setTextColor(0);
+  doc.setFont('helvetica', 'bold');
+  const docTitle = `${docTypeLabels[docData.type] || 'DOCUMENT'} N° ${docData.reference}`;
+  doc.text(docTitle, 14, 60);
+
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  doc.text(`Date d'émission : ${formatDate(docData.createdAt)}`, 14, 68);
+  if (docData.dueDate) {
+    doc.text(`Échéance : ${formatDate(docData.dueDate)}`, 14, 73);
+  }
+
+  // 4. Tableau des articles
+  const tableColumn = ["Description", "Quantité", "Prix Unitaire HT", "Total HT"];
+  const tableRows = docData.items.map(item => [
+    item.name,
+    item.quantity.toString(),
+    formatCurrency(item.unitPrice),
+    formatCurrency(item.total)
+  ]);
+
+  autoTable(doc, {
+    head: [tableColumn],
+    body: tableRows,
+    startY: 85,
+    styles: { fontSize: 10 },
+    headStyles: { fillColor: isKLTools ? [231, 76, 60] : [52, 152, 219] },
+    columnStyles: {
+      1: { halign: 'center' },
+      2: { halign: 'right' },
+      3: { halign: 'right' }
+    },
+    margin: { bottom: 80 }
+  });
+
+  // 5. Totaux
+  let finalY = (doc as any).lastAutoTable.finalY + 10;
+  
+  // Check if there is enough space for the footer, otherwise add a new page
+  if (finalY > 220) {
+    doc.addPage();
+    finalY = 20;
+  }
+  
+  doc.setFontSize(10);
+  doc.text('Total HT :', 160, finalY, { align: 'right' });
+  doc.text(formatCurrency(docData.subtotal), 196, finalY, { align: 'right' });
+
+  const vatLabel = docData.vatAmount > 0 ? `TVA :` : 'TVA (Exonéré) :';
+  doc.text(vatLabel, 160, finalY + 7, { align: 'right' });
+  doc.text(formatCurrency(docData.vatAmount), 196, finalY + 7, { align: 'right' });
+
+  doc.setFontSize(12);
+  doc.setFont('helvetica', 'bold');
+  doc.text('NET A PAYER :', 160, finalY + 16, { align: 'right' });
+  doc.text(formatCurrency(docData.totalAmount), 196, finalY + 16, { align: 'right' });
+
+  // Montant en lettres
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'italic');
+  doc.text('Arrêté la présente facture à la somme de :', 14, finalY + 30);
+  doc.setFont('helvetica', 'bolditalic');
+  const amountInWords = numberToWordsFR(docData.totalAmount);
+  doc.text(amountInWords, 14, finalY + 35, { maxWidth: 120 });
+
+  // Bank Details
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.setTextColor(50);
+  let bankDetails = '';
+  if (fiscalSettings && (fiscalSettings.bankName || fiscalSettings.rib)) {
+    bankDetails = `Coordonnées Bancaires:\nBanque: ${fiscalSettings.bankName || '-'}\nRIB: ${fiscalSettings.rib || '-'}`;
+  } else {
+    bankDetails = isKLTools 
+      ? 'Coordonnées Bancaires:\nBanque: BNA\nRIB: 001 00123 4567891234 56'
+      : 'Coordonnées Bancaires:\nBanque: CPA\nRIB: 004 00456 1234567890 12';
+  }
+  doc.text(bankDetails, 140, finalY + 30);
+
+  // 6. Notes
+  if (docData.notes) {
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(100);
+    doc.text('Notes / Conditions :', 14, finalY + 50);
+    doc.text(docData.notes, 14, finalY + 55, { maxWidth: 100 });
+  }
+
+  const pdfBlob = doc.output('blob');
+  const pdfUrl = URL.createObjectURL(pdfBlob);
+  window.open(pdfUrl, '_blank');
 }

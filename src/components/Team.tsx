@@ -48,7 +48,7 @@ export default function Team() {
           <Card key={emp.id} className="border border-gray-100 shadow-sm relative group">
             <CardContent className="p-4 flex items-center gap-4">
               <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500 to-indigo-700 flex items-center justify-center text-white font-bold text-lg flex-shrink-0">
-                {emp.firstName.charAt(0)}{emp.lastName.charAt(0)}
+                {(emp.firstName || 'U').charAt(0)}{(emp.lastName || '').charAt(0)}
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">

@@ -123,7 +123,7 @@ export default function Pipeline() {
                           if (!emp) return null;
                           return (
                             <div key={id} className="w-6 h-6 rounded-full bg-blue-100 border border-blue-200 flex items-center justify-center text-[10px] font-bold text-blue-700" title={`${emp.firstName} ${emp.lastName}`}>
-                              {emp.firstName.charAt(0)}{emp.lastName.charAt(0)}
+                              {(emp.firstName || 'U').charAt(0)}{(emp.lastName || '').charAt(0)}
                             </div>
                           );
                         })}
@@ -196,7 +196,7 @@ function AssigneesModal({ deal, employees, onClose, onSave }: { deal: Deal, empl
                 onChange={() => toggleEmp(emp.id)}
               />
               <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center text-blue-700 font-bold text-xs">
-                {emp.firstName.charAt(0)}{emp.lastName.charAt(0)}
+                {(emp.firstName || 'U').charAt(0)}{(emp.lastName || '').charAt(0)}
               </div>
               <span className="text-sm font-medium text-gray-900">{emp.firstName} {emp.lastName}</span>
             </label>

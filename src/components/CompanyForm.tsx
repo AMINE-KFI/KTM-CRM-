@@ -10,17 +10,19 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 
 interface CompanyFormProps {
   company?: Company;
+  defaultRole?: 'client' | 'supplier' | 'both';
   onClose: () => void;
 }
 
 const LEGAL_FORMS = ['SARL', 'EURL', 'SPA', 'SNC', 'SCS', 'Auto-entrepreneur', 'Autre'];
 
-export default function CompanyForm({ company, onClose }: CompanyFormProps) {
+export default function CompanyForm({ company, defaultRole = 'client', onClose }: CompanyFormProps) {
   const { addCompany, updateCompany } = useCRM();
   const isEdit = !!company;
 
   const [form, setForm] = useState({
     name: company?.name || '',
+    role: company?.role || defaultRole,
     legalForm: company?.legalForm || 'SARL',
     nif: company?.nif || '',
     nis: company?.nis || '',

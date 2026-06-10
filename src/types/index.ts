@@ -1,4 +1,3 @@
-export type InvoiceStatus = 'paid' | 'unpaid' | 'overdue' | 'pending';
 export type ContactDepartment = 'approvisionnement' | 'comptabilite' | 'direction' | 'commercial' | 'technique' | 'autre';
 
 export interface Contact {
@@ -18,6 +17,7 @@ export interface Contact {
 export interface Company {
   id: string;
   name: string;
+  role?: 'client' | 'supplier' | 'both';
   legalForm: string; // SARL, SAS, SA, etc.
   nif?: string; // NIF
   nis?: string; // NIS
@@ -41,27 +41,6 @@ export interface Company {
   contacts: Contact[];
 }
 
-export interface Invoice {
-  id: string;
-  invoiceNumber: string;
-  companyId: string;
-  issueDate: string;
-  dueDate: string;
-  amount: number;
-  vatAmount: number;
-  totalAmount: number;
-  status: InvoiceStatus;
-  description?: string;
-  reminderSent: boolean;
-  reminderCount: number;
-  lastReminderDate?: string;
-  paidDate?: string;
-  paidAmount?: number;
-  notes?: string;
-  tenant?: TenantType;
-  createdAt: string;
-}
-
 export interface ReminderSettings {
   enabled: boolean;
   firstReminderDays: number;  // days after due date
@@ -77,31 +56,11 @@ export type TenantType = 'katamine' | 'kltools';
 export interface Product {
   id: string;
   name: string;
+  brand?: string;
   description?: string;
   price: number; // Prix par défaut historique
-  prices?: {
-    katamine?: number;
-    kltools?: number;
-  };
+  prices?: Record<string, number>;
   vatRate: number;
-  createdAt: string;
-}
-
-export type QuoteStatus = 'draft' | 'sent' | 'accepted' | 'rejected';
-
-export interface Quote {
-  id: string;
-  quoteNumber: string;
-  companyId: string;
-  issueDate: string;
-  expiryDate: string;
-  amount: number;
-  vatAmount: number;
-  totalAmount: number;
-  status: QuoteStatus;
-  description?: string;
-  notes?: string;
-  tenant?: TenantType;
   createdAt: string;
 }
 
@@ -164,12 +123,74 @@ export interface ActivityLog {
   createdAt: string;
 }
 
+export type DocumentType = 'invoice' | 'proforma' | 'delivery_note' | 'purchase_order';
+export type DocumentStatus = 'draft' | 'validated' | 'partially_paid' | 'paid' | 'cancelled' | 'received';
+
+export interface DocumentItem {
+  id: string;
+  productId?: string;
+  description: string;
+  quantity: number;
+  unitPrice: number;
+  vatRate: number;
+  total: number;
+}
+
+export interface BusinessDocument {
+  id: string;
+  type: DocumentType;
+  status: DocumentStatus;
+  reference: string;
+  companyId: string;
+  date: string;
+  dueDate?: string;
+  items: DocumentItem[];
+  subtotal: number;
+  vatAmount: number;
+  totalAmount: number;
+  notes?: string;
+  tenant: TenantType;
+  createdAt: string;
+}
+
+export interface Payment {
+  id: string;
+  documentId: string;
+  companyId: string;
+  amount: number;
+  date: string;
+  mode: 'cash' | 'check' | 'transfer' | 'traite';
+  reference?: string;
+  tenant: TenantType;
+}
+
+export interface FiscalSettings {
+  companyName: string;
+  address: string;
+  rc: string;
+  nif: string;
+  nis: string;
+  art: string;
+  capital: string;
+  phone: string;
+  email: string;
+  bankInfo: string;
+}
+
+export interface StockMovement {
+  id: string;
+  productId: string;
+  type: 'in' | 'out';
+  quantity: number;
+  referenceId?: string;
+  tenant: TenantType;
+  createdAt: string;
+}
+
 export interface CRMData {
   companies: Company[];
-  invoices: Invoice[];
   reminderSettings: ReminderSettings;
   products: Product[];
-  quotes: Quote[];
   deals: Deal[];
   tasks: Task[];
   notes: Note[];
@@ -178,4 +199,9 @@ export interface CRMData {
   readNotifications: Record<string, string[]>;
   currentUserId: string | null;
   currentTenant: TenantType | null;
+  documents?: BusinessDocument[];
+  payments?: Payment[];
+  stockMovements?: StockMovement[];
+  documentCounters?: Record<string, number>;
+  fiscalSettings?: Record<string, FiscalSettings>; // per tenant
 }

@@ -6,14 +6,45 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Slider } from '@/components/ui/slider';
-import { Mail, Bell, Save, CheckCircle, AlertCircle } from 'lucide-react';
-import type { ReminderSettings } from '@/types';
+import { Mail, Bell, Save, CheckCircle, AlertCircle, FileText, Building2 } from 'lucide-react';
+import type { ReminderSettings, FiscalSettings } from '@/types';
 import { formatCurrency, getDaysOverdue, sendReminderEmail } from '@/lib/storage';
+import { useEffect } from 'react';
 
 export default function SettingsPage() {
-  const { data, updateReminderSettings, updateInvoice, getOverdueInvoices } = useCRM();
+  const { data, updateReminderSettings, updateInvoice, getOverdueInvoices, currentTenant, updateFiscalSettings } = useCRM();
   const [settings, setSettings] = useState<ReminderSettings>({ ...data.reminderSettings });
   const [saved, setSaved] = useState(false);
+
+  const [fiscalSettings, setFiscalSettings] = useState<FiscalSettings>({
+    tenant: currentTenant || 'katamine',
+    rc: '', nif: '', nis: '', art: '', bankName: '', rib: '', address: '', phone: '', email: ''
+  });
+  const [fiscalSaved, setFiscalSaved] = useState(false);
+
+  useEffect(() => {
+    if (currentTenant && data.fiscalSettings && data.fiscalSettings[currentTenant]) {
+      setFiscalSettings(data.fiscalSettings[currentTenant]);
+    } else {
+      setFiscalSettings({
+        tenant: currentTenant || 'katamine',
+        rc: '', nif: '', nis: '', art: '', bankName: '', rib: '', address: '', phone: '', email: ''
+      });
+    }
+  }, [currentTenant, data.fiscalSettings]);
+
+  const setFiscal = (field: keyof FiscalSettings, value: string) => {
+    setFiscalSettings(prev => ({ ...prev, [field]: value }));
+    setFiscalSaved(false);
+  };
+
+  const handleSaveFiscal = () => {
+    if (currentTenant) {
+      updateFiscalSettings(currentTenant, fiscalSettings);
+      setFiscalSaved(true);
+      setTimeout(() => setFiscalSaved(false), 3000);
+    }
+  };
 
   const overdueInvoices = getOverdueInvoices();
 
@@ -78,6 +109,72 @@ export default function SettingsPage() {
         <h1 className="text-2xl font-bold text-gray-900">Paramètres</h1>
         <p className="text-gray-500 text-sm mt-0.5">Configurez les rappels automatiques et les informations de votre société</p>
       </div>
+
+      {/* Fiscal Settings */}
+      <Card className="border border-gray-100 shadow-sm">
+        <CardHeader className="pt-5 pb-3 px-5">
+          <CardTitle className="text-base font-semibold flex items-center gap-2">
+            <Building2 className="w-5 h-5 text-purple-600" />
+            Informations Fiscales & Bancaires ({currentTenant === 'kltools' ? 'KL Tools' : 'Katamine'})
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="px-5 pb-5 space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-3">
+              <h3 className="text-sm font-semibold text-gray-600 border-b pb-2">Informations Fiscales</h3>
+              <div>
+                <Label className="text-xs text-gray-500">Registre de Commerce (RC)</Label>
+                <Input value={fiscalSettings.rc} onChange={e => setFiscal('rc', e.target.value)} className="mt-1 h-9" />
+              </div>
+              <div>
+                <Label className="text-xs text-gray-500">NIF</Label>
+                <Input value={fiscalSettings.nif} onChange={e => setFiscal('nif', e.target.value)} className="mt-1 h-9" />
+              </div>
+              <div>
+                <Label className="text-xs text-gray-500">NIS</Label>
+                <Input value={fiscalSettings.nis} onChange={e => setFiscal('nis', e.target.value)} className="mt-1 h-9" />
+              </div>
+              <div>
+                <Label className="text-xs text-gray-500">Article d'Imposition (ART)</Label>
+                <Input value={fiscalSettings.art} onChange={e => setFiscal('art', e.target.value)} className="mt-1 h-9" />
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <h3 className="text-sm font-semibold text-gray-600 border-b pb-2">Coordonnées & Banque</h3>
+              <div>
+                <Label className="text-xs text-gray-500">Banque</Label>
+                <Input value={fiscalSettings.bankName} onChange={e => setFiscal('bankName', e.target.value)} className="mt-1 h-9" placeholder="Ex: BNA Agence..." />
+              </div>
+              <div>
+                <Label className="text-xs text-gray-500">RIB</Label>
+                <Input value={fiscalSettings.rib} onChange={e => setFiscal('rib', e.target.value)} className="mt-1 h-9" />
+              </div>
+              <div>
+                <Label className="text-xs text-gray-500">Adresse</Label>
+                <Input value={fiscalSettings.address} onChange={e => setFiscal('address', e.target.value)} className="mt-1 h-9" />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <Label className="text-xs text-gray-500">Téléphone</Label>
+                  <Input value={fiscalSettings.phone} onChange={e => setFiscal('phone', e.target.value)} className="mt-1 h-9" />
+                </div>
+                <div>
+                  <Label className="text-xs text-gray-500">Email</Label>
+                  <Input value={fiscalSettings.email} onChange={e => setFiscal('email', e.target.value)} className="mt-1 h-9" />
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <div className="flex gap-3 pt-4 border-t mt-4">
+            <Button onClick={handleSaveFiscal} className="bg-purple-600 hover:bg-purple-700 text-white gap-2">
+              {fiscalSaved ? <CheckCircle className="w-4 h-4" /> : <Save className="w-4 h-4" />}
+              {fiscalSaved ? 'Enregistré !' : 'Enregistrer les informations'}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Reminder Settings */}
       <Card className="border border-gray-100 shadow-sm">
@@ -230,6 +327,41 @@ export default function SettingsPage() {
               })}
             </div>
           )}
+        </CardContent>
+      </Card>
+      <Card className="border border-red-200 shadow-sm mt-8">
+        <CardHeader className="bg-red-50/50 border-b border-red-100">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-red-100 text-red-600 rounded-lg">
+              <AlertCircle className="w-5 h-5" />
+            </div>
+            <div>
+              <CardTitle className="text-red-700">Zone Dangereuse</CardTitle>
+              <p className="text-sm text-red-600/80 mt-1">Actions irréversibles sur la base de données.</p>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="p-6">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div>
+              <p className="font-medium text-gray-900">Réinitialiser l'application</p>
+              <p className="text-sm text-gray-500">Supprime définitivement toutes les données (clients, factures, catalogue, etc.) pour repartir de zéro.</p>
+            </div>
+            <Button 
+              variant="destructive" 
+              onClick={() => {
+                if (confirm("ATTENTION : Vous êtes sur le point d'effacer TOUTES vos données. Cette action est irréversible. Êtes-vous vraiment sûr ?")) {
+                  const val = prompt("Tapez 'SUPPRIMER' pour confirmer :");
+                  if (val === 'SUPPRIMER') {
+                    localStorage.removeItem('katamine_crm_data_v3');
+                    window.location.reload();
+                  }
+                }
+              }}
+            >
+              Effacer les données
+            </Button>
+          </div>
         </CardContent>
       </Card>
     </div>

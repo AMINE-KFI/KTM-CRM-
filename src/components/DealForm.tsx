@@ -140,24 +140,27 @@ export default function DealForm({ onClose, defaultCompanyId, defaultStage = 'le
             </div>
           </div>
 
-          {companyId && companyContacts.length > 0 && (
+          {companyId && (companyContacts || []).length > 0 && (
             <div className="space-y-2">
               <Label>Contacts impliqués</Label>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-2">
-                {companyContacts.map(contact => (
-                  <label key={contact.id} className="flex items-center p-3 border rounded-lg hover:bg-gray-50 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      className="mr-3 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                      checked={contactIds.includes(contact.id)}
-                      onChange={() => handleContactToggle(contact.id)}
-                    />
-                    <div>
-                      <div className="font-medium text-sm text-gray-900">{contact.firstName} {contact.lastName}</div>
-                      <div className="text-xs text-gray-500">{contact.position}</div>
-                    </div>
-                  </label>
-                ))}
+                {(companyContacts || []).map(contact => {
+                  if (!contact) return null;
+                  return (
+                    <label key={contact.id || Math.random()} className="flex items-center p-3 border rounded-lg hover:bg-gray-50 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        className="mr-3 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        checked={(contactIds || []).includes(contact.id)}
+                        onChange={() => handleContactToggle(contact.id)}
+                      />
+                      <div>
+                        <div className="font-medium text-sm text-gray-900">{contact.firstName || ''} {contact.lastName || ''}</div>
+                        <div className="text-xs text-gray-500">{contact.position || ''}</div>
+                      </div>
+                    </label>
+                  );
+                })}
               </div>
             </div>
           )}

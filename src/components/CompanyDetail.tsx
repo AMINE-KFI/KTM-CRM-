@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useCRM } from '@/context/CRMContext';
 import type { Contact, Deal } from '@/types';
 import { formatCurrency, formatDate, getDepartmentLabel, getDaysOverdue } from '@/lib/storage';
@@ -7,50 +7,91 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   ArrowLeft, Building2, Edit, Trash2, Plus, Phone, Mail, Globe,
-  FileText, Users, MoreVertical, MessageSquare, Target
+  FileText, Users, MessageSquare, Target, Upload, Download
 } from 'lucide-react';
-import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger
-} from '@/components/ui/dropdown-menu';
 import CompanyForm from './CompanyForm';
-import ContactForm from './ContactForm';
-import InvoiceForm from './InvoiceForm';
+import DocumentBuilder from './DocumentBuilder';
 import DealForm from './DealForm';
-import { InvoiceStatusBadge } from './Dashboard';
+import ErrorBoundary from './ErrorBoundary';
+import PaymentModal from './PaymentModal';
+import { generateDocumentPDF } from '@/lib/pdf';
+import { saveCompanyFile, getCompanyFiles, deleteCompanyFile } from '@/lib/fileStorage';
+import type { BusinessDocument } from '@/types';
 
 interface CompanyDetailProps {
   companyId: string;
   onBack: () => void;
 }
 
-const DEPT_COLORS: Record<string, string> = {
-  approvisionnement: 'bg-blue-100 text-blue-700',
-  comptabilite: 'bg-green-100 text-green-700',
-  direction: 'bg-purple-100 text-purple-700',
-  commercial: 'bg-orange-100 text-orange-700',
-  technique: 'bg-gray-100 text-gray-700',
-  autre: 'bg-gray-100 text-gray-600',
-};
-
 export default function CompanyDetail({ companyId, onBack }: CompanyDetailProps) {
-  const { data, getCompany, deleteCompany, getInvoicesForCompany, deleteContact, markAsPaid, deleteInvoice, addNote, deleteNote } = useCRM();
+  const { data, getCompany, deleteCompany, getInvoicesForCompany, addNote, getClientSituation, updateDocument, deleteDocument } = useCRM();
   const company = getCompany(companyId);
   const [showEditForm, setShowEditForm] = useState(false);
   const [showContactForm, setShowContactForm] = useState(false);
   const [editContact, setEditContact] = useState<Contact | null>(null);
-  const [showInvoiceForm, setShowInvoiceForm] = useState(false);
   const [showDealForm, setShowDealForm] = useState(false);
   const [editDeal, setEditDeal] = useState<Deal | null>(null);
   const [newNote, setNewNote] = useState('');
+  const [showDocBuilder, setShowDocBuilder] = useState(false);
+  const [docType, setDocType] = useState<'invoice'|'proforma'|'delivery_note'|'purchase_order'>('invoice');
+  const [editDocument, setEditDocument] = useState<BusinessDocument | null>(null);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [files, setFiles] = useState<any[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (companyId) {
+      getCompanyFiles(companyId).then(setFiles).catch(console.error);
+    }
+  }, [companyId]);
+
+  const handlePrint = (doc: BusinessDocument) => {
+    const fs = data.fiscalSettings && doc.tenant ? data.fiscalSettings[doc.tenant] : undefined;
+    if (company) {
+      generateDocumentPDF(doc, company as any, fs);
+    } else {
+      alert("Erreur: Entité introuvable");
+    }
+  };
+
+  const handleCancelDocument = (docId: string) => {
+    if (confirm("Voulez-vous vraiment annuler ce document ? Cette action est irréversible et il restera tracé en tant qu'annulé.")) {
+      updateDocument(docId, { status: 'cancelled' });
+    }
+  };
+
+  const handleDeleteDocument = (docId: string) => {
+    if (confirm("Supprimer définitivement ce brouillon ?")) {
+      deleteDocument(docId);
+    }
+  };
 
   if (!company) return null;
+
+  if (showDocBuilder || editDocument) {
+    return (
+      <DocumentBuilder 
+        onClose={() => { setShowDocBuilder(false); setEditDocument(null); }} 
+        defaultCompanyId={company.id} 
+        defaultType={docType}
+        initialData={editDocument || undefined}
+      />
+    );
+  }
 
   const invoices = getInvoicesForCompany(companyId);
   const unpaidInvoices = invoices.filter(i => i.status !== 'paid');
   const totalUnpaid = unpaidInvoices.reduce((s, i) => s + i.totalAmount, 0);
+
+  const situation = getClientSituation(companyId);
   
   const deals = (data.deals || []).filter(d => d.companyId === companyId);
-  const quotes = (data.quotes || []).filter(q => q.companyId === companyId);
+  const erpDocuments = (data.documents || []).filter(d => d.companyId === companyId);
+  
+  const erpInvoices = erpDocuments.filter(d => d.type === 'invoice');
+  const erpProformas = erpDocuments.filter(d => d.type === 'proforma');
+  const erpBLs = erpDocuments.filter(d => d.type === 'delivery_note');
   
   const notes = (data.notes || []).filter(n => n.companyId === companyId).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
@@ -61,11 +102,63 @@ export default function CompanyDetail({ companyId, onBack }: CompanyDetailProps)
     }
   };
 
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploading(true);
+    try {
+      const reader = new FileReader();
+      reader.onloadend = async () => {
+        const dataUrl = reader.result as string;
+        const newFile = {
+          id: crypto.randomUUID(),
+          companyId,
+          name: file.name,
+          type: file.type,
+          dataUrl,
+          createdAt: new Date().toISOString()
+        };
+        await saveCompanyFile(newFile);
+        setFiles(prev => [...prev, newFile]);
+      };
+      reader.readAsDataURL(file);
+    } catch (err) {
+      console.error(err);
+      alert('Erreur lors de l\'upload');
+    } finally {
+      setIsUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const handleDeleteFile = async (fileId: string) => {
+    if (!confirm('Supprimer ce fichier ?')) return;
+    try {
+      await deleteCompanyFile(fileId);
+      setFiles(prev => prev.filter(f => f.id !== fileId));
+    } catch (err) {
+      console.error(err);
+      alert('Erreur lors de la suppression');
+    }
+  };
+
   const handleAddNote = () => {
     if (!newNote.trim()) return;
     addNote({ content: newNote.trim(), companyId });
     setNewNote('');
   };
+
+  if (showEditForm) return <CompanyForm company={company} onClose={() => setShowEditForm(false)} />;
+  if (showContactForm) return <ContactForm companyId={companyId} contact={editContact || undefined} onClose={() => { setShowContactForm(false); setEditContact(null); }} />;
+  if (showDocBuilder) {
+    return <DocumentBuilder 
+      defaultCompanyId={companyId} 
+      initialData={editDocument || undefined} 
+      onClose={() => { setShowDocBuilder(false); setEditDocument(null); }} 
+    />;
+  }
+  if (showPaymentModal) return <PaymentModal companyId={companyId} onClose={() => setShowPaymentModal(false)} />;
 
   return (
     <div className="space-y-5">
@@ -80,10 +173,10 @@ export default function CompanyDetail({ companyId, onBack }: CompanyDetailProps)
       <div className="flex flex-col sm:flex-row items-start justify-between gap-4">
         <div className="flex items-start gap-4 w-full sm:w-auto">
           <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-white font-bold text-2xl flex-shrink-0">
-            {company.name.charAt(0)}
+            {(company.name || 'Inconnu').charAt(0)}
           </div>
           <div className="min-w-0 flex-1">
-            <h1 className="text-xl sm:text-2xl font-bold text-gray-900 truncate">{company.name}</h1>
+            <h1 className="text-xl sm:text-2xl font-bold text-gray-900 truncate">{company.name || 'Inconnu'}</h1>
             <div className="flex items-center gap-2 mt-1 flex-wrap">
               <span className="text-xs sm:text-sm text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full whitespace-nowrap">{company.legalForm}</span>
               {company.city && <span className="text-xs sm:text-sm text-gray-400 truncate">{company.city}, {company.country}</span>}
@@ -111,8 +204,8 @@ export default function CompanyDetail({ companyId, onBack }: CompanyDetailProps)
           <TabsTrigger value="info" className="gap-2"><Building2 className="w-4 h-4" /> Informations</TabsTrigger>
           <TabsTrigger value="contacts" className="gap-2">
             <Users className="w-4 h-4" /> Contacts
-            {company.contacts.length > 0 && (
-              <span className="ml-1 bg-blue-100 text-blue-600 text-xs px-1.5 py-0.5 rounded-full">{company.contacts.length}</span>
+            {(company.contacts || [])?.length > 0 && (
+              <span className="ml-1 bg-blue-100 text-blue-600 text-xs px-1.5 py-0.5 rounded-full">{(company.contacts || []).length}</span>
             )}
           </TabsTrigger>
           <TabsTrigger value="deals" className="gap-2">
@@ -121,16 +214,29 @@ export default function CompanyDetail({ companyId, onBack }: CompanyDetailProps)
               <span className="ml-1 bg-blue-100 text-blue-600 text-xs px-1.5 py-0.5 rounded-full">{deals.length}</span>
             )}
           </TabsTrigger>
-          <TabsTrigger value="quotes" className="gap-2">
-            <FileText className="w-4 h-4" /> Devis
-            {quotes.length > 0 && (
-              <span className="ml-1 bg-blue-100 text-blue-600 text-xs px-1.5 py-0.5 rounded-full">{quotes.length}</span>
-            )}
-          </TabsTrigger>
+
           <TabsTrigger value="invoices" className="gap-2">
             <FileText className="w-4 h-4" /> Factures
-            {invoices.length > 0 && (
-              <span className="ml-1 bg-blue-100 text-blue-600 text-xs px-1.5 py-0.5 rounded-full">{invoices.length}</span>
+            {erpInvoices.length > 0 && (
+              <span className="ml-1 bg-blue-100 text-blue-600 text-xs px-1.5 py-0.5 rounded-full">{erpInvoices.length}</span>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="bls" className="gap-2">
+            <FileText className="w-4 h-4" /> BL
+            {erpBLs.length > 0 && (
+              <span className="ml-1 bg-blue-100 text-blue-600 text-xs px-1.5 py-0.5 rounded-full">{erpBLs.length}</span>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="proformas" className="gap-2">
+            <FileText className="w-4 h-4" /> Devis (Proforma)
+            {erpProformas.length > 0 && (
+              <span className="ml-1 bg-blue-100 text-blue-600 text-xs px-1.5 py-0.5 rounded-full">{erpProformas.length}</span>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="files" className="gap-2">
+            <Upload className="w-4 h-4" /> Fichiers
+            {files.length > 0 && (
+              <span className="ml-1 bg-blue-100 text-blue-600 text-xs px-1.5 py-0.5 rounded-full">{files.length}</span>
             )}
           </TabsTrigger>
           <TabsTrigger value="notes" className="gap-2">
@@ -143,6 +249,38 @@ export default function CompanyDetail({ companyId, onBack }: CompanyDetailProps)
 
         {/* Info Tab */}
         <TabsContent value="info" className="mt-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <Card className="border border-gray-100 shadow-sm bg-blue-50/50">
+              <CardContent className="p-4">
+                <p className="text-sm font-medium text-gray-500">Total Facturé</p>
+                <p className="text-2xl font-bold text-gray-900 mt-1">{formatCurrency(situation.totalInvoiced)}</p>
+              </CardContent>
+            </Card>
+            <Card className="border border-gray-100 shadow-sm bg-green-50/50">
+              <CardContent className="p-4">
+                <p className="text-sm font-medium text-gray-500">Total Payé</p>
+                <p className="text-2xl font-bold text-gray-900 mt-1">{formatCurrency(situation.totalPaid)}</p>
+              </CardContent>
+            </Card>
+            <Card className="border border-gray-100 shadow-sm bg-red-50/50">
+              <CardContent className="p-4">
+                <p className="text-sm font-medium text-gray-500">Reste à Payer</p>
+                <p className="text-2xl font-bold text-red-600 mt-1">{formatCurrency(situation.balanceDue)}</p>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* ERP Actions */}
+          <div className="flex flex-wrap items-center gap-3 mb-6 bg-blue-50/50 p-4 rounded-xl border border-blue-100">
+            <span className="text-sm font-medium text-blue-900 flex-1 min-w-[200px]">Actions ERP Rapides :</span>
+            <Button size="sm" onClick={() => setShowPaymentModal(true)} variant="outline" className="text-green-700 border-green-200 bg-white hover:bg-green-50 shadow-sm">
+              Encaisser un paiement
+            </Button>
+            <Button size="sm" onClick={() => { setEditDocument(null); setShowDocBuilder(true); }} className="bg-blue-600 hover:bg-blue-700 text-white shadow-sm">
+              Créer Facture / Devis ERP
+            </Button>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <InfoCard title="Coordonnées fiscales">
               <InfoRow label="NIF" value={company.nif} />
@@ -186,15 +324,63 @@ export default function CompanyDetail({ companyId, onBack }: CompanyDetailProps)
           </div>
         </TabsContent>
 
+        {/* Files Tab */}
+        <TabsContent value="files" className="mt-4">
+          <div className="flex justify-between items-center mb-4">
+            <p className="text-sm text-gray-500">{files.length} document{files.length > 1 ? 's' : ''}</p>
+            <div className="flex items-center gap-2">
+              <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" accept=".pdf,.jpg,.jpeg,.png" />
+              <Button size="sm" disabled={isUploading} onClick={() => fileInputRef.current?.click()} className="bg-blue-600 hover:bg-blue-700 text-white gap-2">
+                <Upload className="w-4 h-4" /> {isUploading ? 'Chargement...' : 'Ajouter un document'}
+              </Button>
+            </div>
+          </div>
+          {files.length === 0 ? (
+            <div className="text-center py-12 border-2 border-dashed border-gray-200 rounded-xl">
+              <Upload className="w-10 h-10 text-gray-200 mx-auto mb-2" />
+              <p className="text-gray-400">Aucun document administratif (RC, NIF, NIS...)</p>
+              <Button variant="outline" className="mt-3" size="sm" onClick={() => fileInputRef.current?.click()}>
+                <Plus className="w-4 h-4 mr-2" /> Ajouter un document
+              </Button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {files.map(file => (
+                <Card key={file.id} className="border border-gray-100 shadow-sm relative group overflow-hidden">
+                  <CardContent className="p-4 flex items-center justify-between">
+                    <div className="flex items-center gap-3 overflow-hidden">
+                      <div className="w-10 h-10 bg-blue-50 text-blue-600 rounded-lg flex items-center justify-center flex-shrink-0">
+                        <FileText className="w-5 h-5" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-gray-900 truncate" title={file.name}>{file.name}</p>
+                        <p className="text-xs text-gray-500">{new Date(file.createdAt).toLocaleDateString()}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      <a href={file.dataUrl} download={file.name} className="p-2 text-gray-400 hover:text-blue-600 transition-colors">
+                        <Download className="w-4 h-4" />
+                      </a>
+                      <button onClick={() => handleDeleteFile(file.id)} className="p-2 text-gray-400 hover:text-red-600 transition-colors">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </TabsContent>
+
         {/* Contacts Tab */}
         <TabsContent value="contacts" className="mt-4">
           <div className="flex justify-between items-center mb-4">
-            <p className="text-sm text-gray-500">{company.contacts.length} contact{company.contacts.length > 1 ? 's' : ''}</p>
+            <p className="text-sm text-gray-500">{(company.contacts || []).length} contact{(company.contacts || []).length > 1 ? 's' : ''}</p>
             <Button size="sm" onClick={() => { setEditContact(null); setShowContactForm(true); }} className="bg-blue-600 hover:bg-blue-700 text-white gap-2">
               <Plus className="w-4 h-4" /> Ajouter un contact
             </Button>
           </div>
-          {company.contacts.length === 0 ? (
+          {(company.contacts || []).length === 0 ? (
             <div className="text-center py-12 border-2 border-dashed border-gray-200 rounded-xl">
               <Users className="w-10 h-10 text-gray-200 mx-auto mb-2" />
               <p className="text-gray-400">Aucun contact pour cette entreprise</p>
@@ -204,7 +390,7 @@ export default function CompanyDetail({ companyId, onBack }: CompanyDetailProps)
             </div>
           ) : (
             <div className="grid gap-3">
-              {company.contacts.map(contact => (
+              {(company.contacts || []).map(contact => (
                 <ContactCard
                   key={contact.id}
                   contact={contact}
@@ -264,12 +450,12 @@ export default function CompanyDetail({ companyId, onBack }: CompanyDetailProps)
                           <div className="mt-4">
                             <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Contacts liés</p>
                             <div className="flex flex-wrap gap-2">
-                              {company.contacts
+                              {(company.contacts || [])
                                 .filter(c => deal.contactIds?.includes(c.id))
                                 .map(contact => (
                                   <div key={contact.id} className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 text-sm">
                                     <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-xs">
-                                      {contact.firstName.charAt(0)}{contact.lastName.charAt(0)}
+                                      {(contact.firstName || 'I').charAt(0)}{(contact.lastName || '').charAt(0)}
                                     </div>
                                     <div>
                                       <span className="font-medium text-gray-800">{contact.firstName} {contact.lastName}</span>
@@ -297,109 +483,231 @@ export default function CompanyDetail({ companyId, onBack }: CompanyDetailProps)
           )}
         </TabsContent>
 
-        {/* Quotes Tab */}
-        <TabsContent value="quotes" className="mt-4">
+
+
+        {/* ERP Invoices Tab */}
+        <TabsContent value="invoices" className="mt-4">
           <div className="flex justify-between items-center mb-4">
-            <p className="text-sm text-gray-500">{quotes.length} devis</p>
+            <p className="text-sm text-gray-500">{erpInvoices.length} facture{erpInvoices.length > 1 ? 's' : ''}</p>
+            <Button size="sm" onClick={() => { setDocType('invoice'); setEditDocument(null); setShowDocBuilder(true); }} className="bg-blue-600 hover:bg-blue-700 text-white gap-2">
+              <Plus className="w-4 h-4" /> Nouvelle facture ERP
+            </Button>
           </div>
-          {quotes.length === 0 ? (
+          {erpInvoices.length === 0 ? (
             <div className="text-center py-12 border-2 border-dashed border-gray-200 rounded-xl">
               <FileText className="w-10 h-10 text-gray-200 mx-auto mb-2" />
-              <p className="text-gray-400">Aucun devis pour cette entreprise</p>
+              <p className="text-gray-400">Aucune facture ERP pour cette entreprise</p>
             </div>
           ) : (
             <div className="grid gap-3">
-              {quotes.map(quote => (
-                <Card key={quote.id} className="border border-gray-100 shadow-sm">
-                  <CardContent className="p-4">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <h4 className="font-semibold text-gray-900">{quote.quoteNumber}</h4>
-                        <div className="text-sm text-gray-500 mt-1 flex items-center gap-2 flex-wrap">
-                          <span className="bg-gray-100 px-2 py-0.5 rounded-full">Statut: {quote.status}</span>
-                          <span className="text-gray-900 font-medium">Total: {formatCurrency(quote.totalAmount)}</span>
-                          <span>Échéance: {formatDate(quote.expiryDate)}</span>
+              {erpInvoices
+                .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+                .map(doc => (
+                  <Card 
+                    key={doc.id} 
+                    className="border border-gray-100 shadow-sm hover:border-blue-200 transition-colors cursor-pointer relative group"
+                    onClick={() => setEditDocument(doc)}
+                  >
+                    <CardContent className="p-4">
+                      <div className="flex flex-col sm:flex-row justify-between items-start gap-4">
+                        <div>
+                          <div className="flex items-center gap-3 mb-1">
+                            <span className="font-bold text-gray-900">{doc.reference}</span>
+                            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                              doc.status === 'paid' ? 'bg-green-100 text-green-700' :
+                              doc.status === 'partially_paid' ? 'bg-orange-100 text-orange-700' :
+                              doc.status === 'validated' ? 'bg-blue-100 text-blue-700' :
+                              doc.status === 'cancelled' ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-700'
+                            }`}>
+                              {doc.status === 'draft' ? 'Brouillon' : 
+                               doc.status === 'validated' ? 'Validé' : 
+                               doc.status === 'paid' ? 'Payé' : 
+                               doc.status === 'partially_paid' ? 'Partiellement payé' : 
+                               doc.status === 'cancelled' ? 'Annulé' : doc.status}
+                            </span>
+                          </div>
+                          <p className="text-xs text-gray-500 mt-1">Créée le {formatDate(doc.createdAt)}</p>
+                        </div>
+
+                        <div className="flex items-center gap-4 w-full sm:w-auto border-t border-gray-100 sm:border-0 pt-3 sm:pt-0" onClick={e => e.stopPropagation()}>
+                          <div className="text-left sm:text-right flex-1 sm:flex-none">
+                            <p className="font-bold text-gray-900 text-lg">{formatCurrency(doc.totalAmount)}</p>
+                            <p className="text-xs text-gray-500">{(doc.items || []).length} article(s)</p>
+                          </div>
+                          
+                          <div className="flex gap-1 items-center">
+                            {doc.status === 'draft' && (
+                              <>
+                                <Button variant="ghost" size="sm" onClick={() => { setEditDocument(doc); setShowDocBuilder(true); }} className="text-gray-400 hover:text-blue-600 hover:bg-blue-50 h-8 w-8 p-0" title="Modifier">
+                                  <Edit className="w-4 h-4" />
+                                </Button>
+                                <Button variant="ghost" size="sm" onClick={() => handleDeleteDocument(doc.id)} className="text-gray-400 hover:text-red-600 hover:bg-red-50 h-8 w-8 p-0" title="Supprimer">
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
+                              </>
+                            )}
+                            {(doc.status === 'validated' || doc.status === 'partially_paid') && (
+                              <Button variant="ghost" size="sm" onClick={() => handleCancelDocument(doc.id)} className="text-red-400 hover:text-red-600 hover:bg-red-50 text-xs px-2 h-8">
+                                Annuler
+                              </Button>
+                            )}
+                            <Button variant="ghost" size="sm" onClick={() => handlePrint(doc)} className="text-blue-600 hover:bg-blue-50 h-8 w-8 p-0" title="Télécharger">
+                              <Download className="w-4 h-4" />
+                            </Button>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
+                    </CardContent>
+                  </Card>
+                ))}
             </div>
           )}
         </TabsContent>
 
-        {/* Invoices Tab */}
-        <TabsContent value="invoices" className="mt-4">
+        {/* ERP BLs Tab */}
+        <TabsContent value="bls" className="mt-4">
           <div className="flex justify-between items-center mb-4">
-            <p className="text-sm text-gray-500">{invoices.length} facture{invoices.length > 1 ? 's' : ''}</p>
-            <Button size="sm" onClick={() => setShowInvoiceForm(true)} className="bg-blue-600 hover:bg-blue-700 text-white gap-2">
-              <Plus className="w-4 h-4" /> Nouvelle facture
+            <p className="text-sm text-gray-500">{erpBLs.length} BL</p>
+            <Button size="sm" onClick={() => { setDocType('delivery_note'); setEditDocument(null); setShowDocBuilder(true); }} className="bg-blue-600 hover:bg-blue-700 text-white gap-2">
+              <Plus className="w-4 h-4" /> Nouveau BL
             </Button>
           </div>
-          {invoices.length === 0 ? (
+          {erpBLs.length === 0 ? (
             <div className="text-center py-12 border-2 border-dashed border-gray-200 rounded-xl">
               <FileText className="w-10 h-10 text-gray-200 mx-auto mb-2" />
-              <p className="text-gray-400">Aucune facture pour cette entreprise</p>
+              <p className="text-gray-400">Aucun bon de livraison pour cette entreprise</p>
             </div>
           ) : (
             <div className="grid gap-3">
-              {invoices
+              {erpBLs
                 .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-                .map(inv => (
-                  <Card key={inv.id} className="border border-gray-100 shadow-sm">
+                .map(doc => (
+                  <Card 
+                    key={doc.id} 
+                    className="border border-gray-100 shadow-sm hover:border-blue-200 transition-colors cursor-pointer relative group"
+                    onClick={() => setEditDocument(doc)}
+                  >
                     <CardContent className="p-4">
-                      <div className="flex flex-col sm:flex-row items-start justify-between gap-4">
-                        <div className="flex-1 w-full min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-semibold text-gray-900 truncate">{inv.invoiceNumber}</span>
-                            <InvoiceStatusBadge status={inv.status} />
+                      <div className="flex flex-col sm:flex-row justify-between items-start gap-4">
+                        <div>
+                          <div className="flex items-center gap-3 mb-1">
+                            <span className="font-bold text-gray-900">{doc.reference}</span>
+                            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                              doc.status === 'paid' ? 'bg-green-100 text-green-700' :
+                              doc.status === 'partially_paid' ? 'bg-orange-100 text-orange-700' :
+                              doc.status === 'validated' ? 'bg-blue-100 text-blue-700' :
+                              doc.status === 'cancelled' ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-700'
+                            }`}>
+                              {doc.status === 'draft' ? 'Brouillon' : 
+                               doc.status === 'validated' ? 'Validé' : 
+                               doc.status === 'paid' ? 'Payé' : 
+                               doc.status === 'partially_paid' ? 'Partiellement payé' : 
+                               doc.status === 'cancelled' ? 'Annulé' : doc.status}
+                            </span>
                           </div>
-                          <p className="text-sm text-gray-500 mt-1 truncate">{inv.description || 'Sans description'}</p>
-                          <div className="flex flex-wrap gap-3 mt-2 text-xs text-gray-400">
-                            <span>Émise: {formatDate(inv.issueDate)}</span>
-                            <span>Échéance: {formatDate(inv.dueDate)}</span>
-                            {inv.status !== 'paid' && getDaysOverdue(inv.dueDate) > 0 && (
-                              <span className="text-red-500 font-medium whitespace-nowrap">{getDaysOverdue(inv.dueDate)}j de retard</span>
+                          <p className="text-xs text-gray-500 mt-1">Créé le {formatDate(doc.createdAt)}</p>
+                        </div>
+
+                        <div className="flex items-center gap-4 w-full sm:w-auto border-t border-gray-100 sm:border-0 pt-3 sm:pt-0" onClick={e => e.stopPropagation()}>
+                          <div className="text-left sm:text-right flex-1 sm:flex-none">
+                            <p className="font-bold text-gray-900 text-lg">{formatCurrency(doc.totalAmount)}</p>
+                            <p className="text-xs text-gray-500">{(doc.items || []).length} article(s)</p>
+                          </div>
+                          
+                          <div className="flex gap-1 items-center">
+                            {doc.status === 'draft' && (
+                              <>
+                                <Button variant="ghost" size="sm" onClick={() => { setEditDocument(doc); setShowDocBuilder(true); }} className="text-gray-400 hover:text-blue-600 hover:bg-blue-50 h-8 w-8 p-0" title="Modifier">
+                                  <Edit className="w-4 h-4" />
+                                </Button>
+                                <Button variant="ghost" size="sm" onClick={() => handleDeleteDocument(doc.id)} className="text-gray-400 hover:text-red-600 hover:bg-red-50 h-8 w-8 p-0" title="Supprimer">
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
+                              </>
                             )}
+                            {(doc.status === 'validated' || doc.status === 'partially_paid') && (
+                              <Button variant="ghost" size="sm" onClick={() => handleCancelDocument(doc.id)} className="text-red-400 hover:text-red-600 hover:bg-red-50 text-xs px-2 h-8">
+                                Annuler
+                              </Button>
+                            )}
+                            <Button variant="ghost" size="sm" onClick={() => handlePrint(doc)} className="text-blue-600 hover:bg-blue-50 h-8 w-8 p-0" title="Télécharger">
+                              <Download className="w-4 h-4" />
+                            </Button>
                           </div>
                         </div>
-                        <div className="flex items-center justify-between w-full sm:w-auto sm:justify-end gap-3 border-t border-gray-100 sm:border-0 pt-3 sm:pt-0">
-                          <div className="text-left sm:text-right">
-                            <p className="font-bold text-gray-900">{formatCurrency(inv.totalAmount)}</p>
-                            <p className="text-xs text-gray-400">HT: {formatCurrency(inv.amount)}</p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+            </div>
+          )}
+        </TabsContent>
+
+        {/* ERP Proformas Tab */}
+        <TabsContent value="proformas" className="mt-4">
+          <div className="flex justify-between items-center mb-4">
+            <p className="text-sm text-gray-500">{erpProformas.length} devis ERP</p>
+            <Button size="sm" onClick={() => { setDocType('proforma'); setEditDocument(null); setShowDocBuilder(true); }} className="bg-blue-600 hover:bg-blue-700 text-white gap-2">
+              <Plus className="w-4 h-4" /> Nouveau devis ERP
+            </Button>
+          </div>
+          {erpProformas.length === 0 ? (
+            <div className="text-center py-12 border-2 border-dashed border-gray-200 rounded-xl">
+              <FileText className="w-10 h-10 text-gray-200 mx-auto mb-2" />
+              <p className="text-gray-400">Aucun devis ERP pour cette entreprise</p>
+            </div>
+          ) : (
+            <div className="grid gap-3">
+              {erpProformas
+                .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+                .map(doc => (
+                  <Card 
+                    key={doc.id} 
+                    className="border border-gray-100 shadow-sm hover:border-blue-200 transition-colors cursor-pointer relative group"
+                    onClick={() => setEditDocument(doc)}
+                  >
+                    <CardContent className="p-4">
+                      <div className="flex flex-col sm:flex-row justify-between items-start gap-4">
+                        <div>
+                          <div className="flex items-center gap-3 mb-1">
+                            <span className="font-bold text-gray-900">{doc.reference}</span>
+                            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                              doc.status === 'validated' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-700'
+                            }`}>
+                              {doc.status === 'draft' ? 'Brouillon' : 
+                               doc.status === 'validated' ? 'Validé' : 
+                               doc.status === 'cancelled' ? 'Annulé' : doc.status}
+                            </span>
                           </div>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                                <MoreVertical className="w-4 h-4" />
+                          <p className="text-xs text-gray-500 mt-1">Créé le {formatDate(doc.createdAt)}</p>
+                        </div>
+
+                        <div className="flex items-center gap-4 w-full sm:w-auto border-t border-gray-100 sm:border-0 pt-3 sm:pt-0" onClick={e => e.stopPropagation()}>
+                          <div className="text-left sm:text-right flex-1 sm:flex-none">
+                            <p className="font-bold text-gray-900 text-lg">{formatCurrency(doc.totalAmount)}</p>
+                            <p className="text-xs text-gray-500">{(doc.items || []).length} article(s)</p>
+                          </div>
+                          
+                          <div className="flex gap-1 items-center">
+                            {doc.status === 'draft' && (
+                              <>
+                                <Button variant="ghost" size="sm" onClick={() => { setEditDocument(doc); setShowDocBuilder(true); }} className="text-gray-400 hover:text-blue-600 hover:bg-blue-50 h-8 w-8 p-0" title="Modifier">
+                                  <Edit className="w-4 h-4" />
+                                </Button>
+                                <Button variant="ghost" size="sm" onClick={() => handleDeleteDocument(doc.id)} className="text-gray-400 hover:text-red-600 hover:bg-red-50 h-8 w-8 p-0" title="Supprimer">
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
+                              </>
+                            )}
+                            {(doc.status === 'validated' || doc.status === 'partially_paid') && (
+                              <Button variant="ghost" size="sm" onClick={() => handleCancelDocument(doc.id)} className="text-red-400 hover:text-red-600 hover:bg-red-50 text-xs px-2 h-8">
+                                Annuler
                               </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              {inv.status !== 'paid' ? (
-                                <DropdownMenuItem onClick={() => {
-                                  const date = prompt('Date de paiement (YYYY-MM-DD):', new Date().toISOString().split('T')[0]);
-                                  if (date) markAsPaid(inv.id, date);
-                                }} className="text-green-600">
-                                  ✓ Marquer comme payée
-                                </DropdownMenuItem>
-                              ) : (
-                                <DropdownMenuItem onClick={() => {
-                                  const current = inv.paidDate || new Date().toISOString().split('T')[0];
-                                  const date = prompt('Modifier la date de paiement (YYYY-MM-DD):', current);
-                                  if (date) markAsPaid(inv.id, date);
-                                }} className="text-blue-600">
-                                  Modifier la date de paiement
-                                </DropdownMenuItem>
-                              )}
-                              <DropdownMenuItem
-                                onClick={() => { if (confirm('Supprimer cette facture ?')) deleteInvoice(inv.id); }}
-                                className="text-red-600"
-                              >
-                                Supprimer
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
+                            )}
+                            <Button variant="ghost" size="sm" onClick={() => handlePrint(doc)} className="text-blue-600 hover:bg-blue-50 h-8 w-8 p-0" title="Télécharger">
+                              <Download className="w-4 h-4" />
+                            </Button>
+                          </div>
                         </div>
                       </div>
                     </CardContent>
@@ -467,19 +775,16 @@ export default function CompanyDetail({ companyId, onBack }: CompanyDetailProps)
           onClose={() => { setShowContactForm(false); setEditContact(null); }}
         />
       )}
-      {showInvoiceForm && (
-        <InvoiceForm
-          companyId={companyId}
-          onClose={() => setShowInvoiceForm(false)}
-        />
-      )}
       {showDealForm && (
-        <DealForm
-          deal={editDeal || undefined}
-          defaultCompanyId={companyId}
-          onClose={() => { setShowDealForm(false); setEditDeal(null); }}
-        />
+        <ErrorBoundary>
+          <DealForm 
+            deal={editDeal || undefined}
+            defaultCompanyId={companyId}
+            onClose={() => { setShowDealForm(false); setEditDeal(null); }} 
+          />
+        </ErrorBoundary>
       )}
+      {showPaymentModal && <PaymentModal onClose={() => setShowPaymentModal(false)} companyId={company.id} />}
     </div>
   );
 }
@@ -505,6 +810,15 @@ function InfoRow({ label, value }: { label: string; value?: string }) {
   );
 }
 
+const DEPT_COLORS: Record<string, string> = {
+  approvisionnement: 'bg-emerald-100 text-emerald-700',
+  comptabilite: 'bg-blue-100 text-blue-700',
+  direction: 'bg-violet-100 text-violet-700',
+  commercial: 'bg-amber-100 text-amber-700',
+  technique: 'bg-slate-100 text-slate-700',
+  autre: 'bg-gray-100 text-gray-700',
+};
+
 function ContactCard({ contact, onEdit, onDelete }: { contact: Contact; onEdit: () => void; onDelete: () => void }) {
   return (
     <Card className="border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
@@ -512,7 +826,7 @@ function ContactCard({ contact, onEdit, onDelete }: { contact: Contact; onEdit: 
         <div className="flex flex-col sm:flex-row items-start justify-between gap-4">
           <div className="flex items-start gap-3 w-full min-w-0">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-400 to-violet-600 flex items-center justify-center text-white font-bold flex-shrink-0">
-              {contact.firstName.charAt(0)}{contact.lastName.charAt(0)}
+              {(contact.firstName || 'I').charAt(0)}{(contact.lastName || '').charAt(0)}
             </div>
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2 flex-wrap">

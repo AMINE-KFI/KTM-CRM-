@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import type { CRMData, Company, Contact, Invoice, ReminderSettings, Product, Quote, Deal, Task, Note, Employee, TenantType, ActivityLog } from '../types';
+import type { CRMData, Company, Contact, ReminderSettings, Product, Deal, Task, Note, Employee, TenantType, ActivityLog, FiscalSettings } from '../types';
 import { loadData, saveData, generateId } from '../lib/storage';
+import type { BusinessDocument, Payment, StockMovement } from '../types';
 
 interface CRMContextType {
   data: CRMData;
@@ -26,14 +27,10 @@ interface CRMContextType {
   updateContact: (id: string, updates: Partial<Contact>) => void;
   deleteContact: (id: string) => void;
   // Invoices
-  addInvoice: (invoice: Omit<Invoice, 'id' | 'createdAt' | 'reminderSent' | 'reminderCount'>) => Invoice;
-  updateInvoice: (id: string, updates: Partial<Invoice>) => void;
-  deleteInvoice: (id: string) => void;
-  markAsPaid: (id: string, paidDate?: string) => void;
-  getInvoicesForCompany: (companyId: string) => Invoice[];
+  getInvoicesForCompany: (companyId: string) => BusinessDocument[];
   // Reminders
   updateReminderSettings: (settings: ReminderSettings) => void;
-  getOverdueInvoices: () => (Invoice & { company: Company })[];
+  getOverdueInvoices: () => (BusinessDocument & { company: Company })[];
   // Stats
   getTotalUnpaid: () => number;
   getTotalPaid: () => number;
@@ -43,12 +40,7 @@ interface CRMContextType {
   updateProduct: (id: string, updates: Partial<Product>) => void;
   deleteProduct: (id: string) => void;
   
-  // Quotes
-  addQuote: (quote: Omit<Quote, 'id' | 'createdAt'>) => Quote;
-  updateQuote: (id: string, updates: Partial<Quote>) => void;
-  deleteQuote: (id: string) => void;
-  convertQuoteToInvoice: (quoteId: string) => Invoice | null;
-  
+
   // Deals
   addDeal: (deal: Omit<Deal, 'id' | 'createdAt'>) => Deal;
   updateDeal: (id: string, updates: Partial<Deal>) => void;
@@ -64,7 +56,18 @@ interface CRMContextType {
   deleteNote: (id: string) => void;
   
   // Activities
-  addActivityLog: (log: Omit<ActivityLog, 'id' | 'createdAt'>) => void;
+  // Stock
+  addStockMovement: (movement: Omit<StockMovement, 'id' | 'createdAt'>) => StockMovement;
+  // Settings
+  updateFiscalSettings: (tenant: string, settings: FiscalSettings) => void;
+  addStockMovement: (movement: Omit<StockMovement, 'id' | 'createdAt'>) => StockMovement;
+  
+  // ERP Documents
+  addDocument: (doc: Omit<BusinessDocument, 'id' | 'createdAt' | 'reference'>) => BusinessDocument;
+  updateDocument: (id: string, updates: Partial<BusinessDocument>) => void;
+  deleteDocument: (id: string) => void;
+  addPayment: (payment: Omit<Payment, 'id'>) => Payment;
+  getClientSituation: (companyId: string) => { totalInvoiced: number; totalPaid: number; balanceDue: number };
 }
 
 const CRMContext = createContext<CRMContextType | null>(null);
@@ -98,7 +101,7 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
     setData(prev => ({
       ...prev,
       companies: prev.companies.filter(c => c.id !== id),
-      invoices: prev.invoices.filter(inv => inv.companyId !== id),
+      documents: (prev.documents || []).filter(d => d.companyId !== id),
     }));
   }, []);
 
@@ -116,7 +119,7 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
       ...prev,
       companies: prev.companies.map(c =>
         c.id === contact.companyId
-          ? { ...c, contacts: [...c.contacts, newContact] }
+          ? { ...c, contacts: [...(c.contacts || []), newContact] }
           : c
       ),
     }));
@@ -128,7 +131,7 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
       ...prev,
       companies: prev.companies.map(c => ({
         ...c,
-        contacts: c.contacts.map(ct => ct.id === id ? { ...ct, ...updates } : ct),
+        contacts: (c.contacts || []).map(ct => ct.id === id ? { ...ct, ...updates } : ct),
       })),
     }));
   }, []);
@@ -138,57 +141,15 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
       ...prev,
       companies: prev.companies.map(c => ({
         ...c,
-        contacts: c.contacts.filter(ct => ct.id !== id),
+        contacts: (c.contacts || []).filter(ct => ct.id !== id),
       })),
     }));
   }, []);
 
-  const addInvoice = useCallback((invoice: Omit<Invoice, 'id' | 'createdAt' | 'reminderSent' | 'reminderCount'>): Invoice => {
-    setData(prev => {
-      const newInvoice: Invoice = {
-        ...invoice,
-        id: generateId(),
-        createdAt: new Date().toISOString(),
-        reminderSent: false,
-        reminderCount: 0,
-        tenant: prev.currentTenant || undefined,
-      };
-      return { ...prev, invoices: [...prev.invoices, newInvoice] };
-    });
-    // This return is fake because state update is async, but we have to satisfy the signature. 
-    // In real app, we shouldn't return from state setter like this if we need the ID immediately, 
-    // but we can generate it outside.
-    return { ...invoice, id: 'temp', createdAt: '', reminderSent: false, reminderCount: 0 } as Invoice;
-  }, []);
-
-  const updateInvoice = useCallback((id: string, updates: Partial<Invoice>) => {
-    setData(prev => ({
-      ...prev,
-      invoices: prev.invoices.map(inv => inv.id === id ? { ...inv, ...updates } : inv),
-    }));
-  }, []);
-
-  const deleteInvoice = useCallback((id: string) => {
-    setData(prev => ({
-      ...prev,
-      invoices: prev.invoices.filter(inv => inv.id !== id),
-    }));
-  }, []);
-
-  const markAsPaid = useCallback((id: string, paidDate?: string) => {
-    setData(prev => ({
-      ...prev,
-      invoices: prev.invoices.map(inv =>
-        inv.id === id
-          ? { ...inv, status: 'paid', paidDate: paidDate || new Date().toISOString().split('T')[0] }
-          : inv
-      ),
-    }));
-  }, []);
-
   const getInvoicesForCompany = useCallback((companyId: string) => {
-    return data.invoices.filter(inv => inv.companyId === companyId && (!data.currentTenant || inv.tenant === data.currentTenant));
-  }, [data.invoices, data.currentTenant]);
+    const erpInvoices = (data.documents || []).filter(d => d.type === 'invoice');
+    return erpInvoices.filter(inv => inv.companyId === companyId && (!data.currentTenant || inv.tenant === data.currentTenant));
+  }, [data.documents, data.currentTenant]);
 
   const updateReminderSettings = useCallback((settings: ReminderSettings) => {
     setData(prev => ({ ...prev, reminderSettings: settings }));
@@ -197,8 +158,9 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
   const getOverdueInvoices = useCallback(() => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
+    const erpInvoices = (data.documents || []).filter(d => d.type === 'invoice');
     
-    return data.invoices
+    return erpInvoices
       .filter(inv => {
         if (data.currentTenant && inv.tenant !== data.currentTenant) return false;
         if (inv.status === 'paid') return false;
@@ -210,19 +172,21 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
         return { ...inv, company };
       })
       .filter(inv => inv.company);
-  }, [data.invoices, data.companies, data.currentTenant]);
+  }, [data.documents, data.companies, data.currentTenant]);
 
   const getTotalUnpaid = useCallback(() => {
-    return data.invoices
+    const erpInvoices = (data.documents || []).filter(d => d.type === 'invoice');
+    return erpInvoices
       .filter(inv => inv.status !== 'paid' && (!data.currentTenant || inv.tenant === data.currentTenant))
       .reduce((sum, inv) => sum + inv.totalAmount, 0);
-  }, [data.invoices, data.currentTenant]);
+  }, [data.documents, data.currentTenant]);
 
   const getTotalPaid = useCallback(() => {
-    return data.invoices
+    const erpInvoices = (data.documents || []).filter(d => d.type === 'invoice');
+    return erpInvoices
       .filter(inv => inv.status === 'paid' && (!data.currentTenant || inv.tenant === data.currentTenant))
       .reduce((sum, inv) => sum + inv.totalAmount, 0);
-  }, [data.invoices, data.currentTenant]);
+  }, [data.documents, data.currentTenant]);
 
   const addProduct = useCallback((product: Omit<Product, 'id' | 'createdAt'>): Product => {
     const newProduct: Product = { ...product, id: generateId(), createdAt: new Date().toISOString() };
@@ -236,55 +200,6 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
 
   const deleteProduct = useCallback((id: string) => {
     setData(prev => ({ ...prev, products: (prev.products || []).filter(p => p.id !== id) }));
-  }, []);
-
-  const addQuote = useCallback((quote: Omit<Quote, 'id' | 'createdAt'>): Quote => {
-    let newQuote: Quote | null = null;
-    setData(prev => {
-      newQuote = { ...quote, id: generateId(), createdAt: new Date().toISOString(), tenant: prev.currentTenant || undefined };
-      return { ...prev, quotes: [...(prev.quotes || []), newQuote] };
-    });
-    return newQuote || ({} as Quote);
-  }, []);
-
-  const updateQuote = useCallback((id: string, updates: Partial<Quote>) => {
-    setData(prev => ({ ...prev, quotes: (prev.quotes || []).map(q => q.id === id ? { ...q, ...updates } : q) }));
-  }, []);
-
-  const deleteQuote = useCallback((id: string) => {
-    setData(prev => ({ ...prev, quotes: (prev.quotes || []).filter(q => q.id !== id) }));
-  }, []);
-
-  const convertQuoteToInvoice = useCallback((quoteId: string): Invoice | null => {
-    let newInvoice: Invoice | null = null;
-    setData(prev => {
-      const quote = (prev.quotes || []).find(q => q.id === quoteId);
-      if (!quote) return prev;
-      
-      newInvoice = {
-        id: generateId(),
-        invoiceNumber: `FAC-${quote.quoteNumber.split('-').slice(1).join('-') || Date.now().toString().slice(-6)}`,
-        companyId: quote.companyId,
-        issueDate: new Date().toISOString().split('T')[0],
-        dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 30 days
-        amount: quote.amount,
-        vatAmount: quote.vatAmount,
-        totalAmount: quote.totalAmount,
-        status: 'unpaid',
-        description: quote.description,
-        reminderSent: false,
-        reminderCount: 0,
-        tenant: prev.currentTenant || undefined,
-        createdAt: new Date().toISOString()
-      };
-
-      return {
-        ...prev,
-        quotes: prev.quotes.map(q => q.id === quoteId ? { ...q, status: 'accepted' } : q),
-        invoices: [...prev.invoices, newInvoice]
-      };
-    });
-    return newInvoice;
   }, []);
 
   const addDeal = useCallback((deal: Omit<Deal, 'id' | 'createdAt'>): Deal => {
@@ -368,16 +283,287 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
+  const addStockMovement = useCallback((movement: Omit<StockMovement, 'id' | 'createdAt'>): StockMovement => {
+    let newMov: StockMovement | null = null;
+    setData(prev => {
+      newMov = { ...movement, id: generateId(), createdAt: new Date().toISOString() };
+      
+      // Update product stock directly
+      const updatedProducts = (prev.products || []).map(p => {
+        if (p.id === movement.productId) {
+          const t = movement.tenant;
+          const currentStock = p.stock?.[t] || 0;
+          const diff = movement.type === 'in' ? movement.quantity : -movement.quantity;
+          return {
+            ...p,
+            stock: {
+              ...(p.stock || {}),
+              [t]: Math.max(0, currentStock + diff) // Prevent negative stock for simplicity
+            }
+          };
+        }
+        return p;
+      });
+
+      return { 
+        ...prev, 
+        stockMovements: [...(prev.stockMovements || []), newMov],
+        products: updatedProducts
+      };
+    });
+    return newMov || ({} as StockMovement);
+  }, []);
+
+  const addDocument = useCallback((doc: Omit<BusinessDocument, 'id' | 'createdAt' | 'reference'>): BusinessDocument => {
+    let newDoc: BusinessDocument | null = null;
+    setData(prev => {
+      const tenant = prev.currentTenant || doc.tenant;
+      const t = tenant === 'katamine' ? 'KTM' : 'KLT';
+      const year = new Date().getFullYear();
+      
+      let reference = `BROUILLON-${generateId().slice(0, 5)}`;
+      let nextCounter = null;
+      let counterKey = '';
+
+      if (doc.status === 'validated') {
+        const typePrefix = doc.type === 'invoice' ? 'FAC' : doc.type === 'proforma' ? 'PRO' : doc.type === 'delivery_note' ? 'BL' : 'BC';
+        counterKey = `${typePrefix}_${t}_${year}`;
+        const currentCounter = (prev.documentCounters || {})[counterKey] || 0;
+        nextCounter = currentCounter + 1;
+        reference = `${typePrefix}-${t}-${year}-${nextCounter.toString().padStart(4, '0')}`;
+      }
+      
+      newDoc = { 
+        ...doc, 
+        id: generateId(), 
+        reference,
+        createdAt: new Date().toISOString(), 
+        tenant 
+      };
+
+      let newMovements = [...(prev.stockMovements || [])];
+      let updatedProducts = [...(prev.products || [])];
+
+      if (newDoc.status === 'validated' && (newDoc.type === 'invoice' || newDoc.type === 'delivery_note')) {
+        newDoc.items.forEach(item => {
+          if (item.productId) {
+            newMovements.push({
+              id: generateId(),
+              productId: item.productId,
+              type: 'out',
+              quantity: item.quantity,
+              referenceId: newDoc!.id,
+              tenant,
+              createdAt: new Date().toISOString()
+            });
+
+            updatedProducts = updatedProducts.map(p => {
+              if (p.id === item.productId) {
+                const currentStock = p.stock?.[tenant] || 0;
+                return { ...p, stock: { ...(p.stock || {}), [tenant]: Math.max(0, currentStock - item.quantity) } };
+              }
+              return p;
+            });
+          }
+        });
+      }
+
+      const countersUpdate = nextCounter !== null ? { [counterKey]: nextCounter } : {};
+
+      return { 
+        ...prev, 
+        documents: [...(prev.documents || []), newDoc],
+        documentCounters: { ...(prev.documentCounters || {}), ...countersUpdate },
+        stockMovements: newMovements,
+        products: updatedProducts
+      };
+    });
+    return newDoc || ({} as BusinessDocument);
+  }, []);
+
+  const updateDocument = useCallback((id: string, updates: Partial<BusinessDocument>) => {
+    setData(prev => {
+      const docs = prev.documents || [];
+      const oldDoc = docs.find(d => d.id === id);
+      if (!oldDoc) return prev;
+
+      // Business Rule: Can only modify drafts. If not draft, can only change status (e.g. to cancelled or paid)
+      const updatedKeys = Object.keys(updates);
+      const isStatusOnlyChange = updatedKeys.every(k => k === 'status');
+      if (oldDoc.status !== 'draft' && !isStatusOnlyChange) {
+        console.warn("Modification refusée : La facture n'est plus à l'état de brouillon.");
+        return prev;
+      }
+
+      const newDoc = { ...oldDoc, ...updates };
+      let newMovements = [...(prev.stockMovements || [])];
+      let updatedProducts = [...(prev.products || [])];
+      let newCounters = { ...(prev.documentCounters || {}) };
+
+      // Transition Draft -> Validated
+      if (oldDoc.status === 'draft' && newDoc.status === 'validated') {
+        const t = newDoc.tenant === 'katamine' ? 'KTM' : 'KLT';
+        const year = new Date(newDoc.date || Date.now()).getFullYear();
+        const typePrefix = newDoc.type === 'invoice' ? 'FAC' : newDoc.type === 'proforma' ? 'PRO' : newDoc.type === 'delivery_note' ? 'BL' : 'BC';
+        const counterKey = `${typePrefix}_${t}_${year}`;
+        const currentCounter = newCounters[counterKey] || 0;
+        const nextCounter = currentCounter + 1;
+        
+        newDoc.reference = `${typePrefix}-${t}-${year}-${nextCounter.toString().padStart(4, '0')}`;
+        newCounters[counterKey] = nextCounter;
+
+        if (newDoc.type === 'invoice' || newDoc.type === 'delivery_note') {
+          newDoc.items.forEach(item => {
+            if (item.productId) {
+              newMovements.push({
+                id: generateId(),
+                productId: item.productId,
+                type: 'out',
+                quantity: item.quantity,
+                referenceId: newDoc.id,
+                tenant: newDoc.tenant,
+                createdAt: new Date().toISOString()
+              });
+
+              updatedProducts = updatedProducts.map(p => {
+                if (p.id === item.productId) {
+                  const currentStock = p.stock?.[newDoc.tenant] || 0;
+                  return { ...p, stock: { ...(p.stock || {}), [newDoc.tenant]: Math.max(0, currentStock - item.quantity) } };
+                }
+                return p;
+              });
+            }
+          });
+        }
+      }
+
+      // If a purchase order becomes 'received', increase stock
+      if (oldDoc.type === 'purchase_order' && oldDoc.status !== 'received' && newDoc.status === 'received') {
+        newDoc.items.forEach(item => {
+          if (item.productId) {
+            newMovements.push({
+              id: generateId(),
+              productId: item.productId,
+              type: 'in',
+              quantity: item.quantity,
+              referenceId: newDoc.id,
+              tenant: newDoc.tenant,
+              createdAt: new Date().toISOString()
+            });
+
+            updatedProducts = updatedProducts.map(p => {
+              if (p.id === item.productId) {
+                const currentStock = p.stock?.[newDoc.tenant] || 0;
+                return { ...p, stock: { ...(p.stock || {}), [newDoc.tenant]: currentStock + item.quantity } };
+              }
+              return p;
+            });
+          }
+        });
+      }
+
+      return { 
+        ...prev, 
+        documents: docs.map(d => d.id === id ? newDoc : d),
+        documentCounters: newCounters,
+        stockMovements: newMovements,
+        products: updatedProducts
+      };
+    });
+  }, []);
+
+  const deleteDocument = useCallback((id: string) => {
+    setData(prev => {
+      const docs = prev.documents || [];
+      const doc = docs.find(d => d.id === id);
+      if (doc && doc.status !== 'draft') {
+        alert("Interdit : Vous ne pouvez pas supprimer un document validé. Veuillez l'annuler à la place.");
+        return prev;
+      }
+      return { ...prev, documents: docs.filter(d => d.id !== id) };
+    });
+  }, []);
+
+  const addPayment = useCallback((payment: Omit<Payment, 'id'>): Payment => {
+    let newPayment: Payment | null = null;
+    setData(prev => {
+      newPayment = { ...payment, id: generateId(), tenant: prev.currentTenant || payment.tenant };
+      const newPaymentsList = [...(prev.payments || []), newPayment];
+      let newDocs = [...(prev.documents || [])];
+
+      // Auto update document status to paid or partially_paid if total paid >= total amount
+      if (newPayment.documentId) {
+        const doc = newDocs.find(d => d.id === newPayment!.documentId);
+        if (doc && doc.status !== 'paid' && doc.status !== 'cancelled') {
+          const totalPaidForDoc = newPaymentsList
+            .filter(p => p.documentId === doc.id)
+            .reduce((sum, p) => sum + p.amount, 0);
+            
+          let newStatus = doc.status;
+          if (totalPaidForDoc >= doc.totalAmount) {
+            newStatus = 'paid';
+          } else if (totalPaidForDoc > 0) {
+            newStatus = 'partially_paid';
+          }
+          
+          if (newStatus !== doc.status) {
+            newDocs = newDocs.map(d => d.id === doc.id ? { ...d, status: newStatus } : d);
+          }
+        }
+      }
+
+      return { 
+        ...prev, 
+        payments: newPaymentsList,
+        documents: newDocs
+      };
+    });
+    return newPayment || ({} as Payment);
+  }, []);
+
+  const getClientSituation = useCallback((companyId: string) => {
+    const docs = data.documents || [];
+    const pays = data.payments || [];
+    
+    const invoices = docs.filter(d => 
+      d.companyId === companyId && 
+      d.type === 'invoice' && 
+      (d.status === 'validated' || d.status === 'partially_paid' || d.status === 'paid') &&
+      (!data.currentTenant || d.tenant === data.currentTenant)
+    );
+    
+    const clientPayments = pays.filter(p => 
+      p.companyId === companyId &&
+      (!data.currentTenant || p.tenant === data.currentTenant)
+    );
+
+    const totalInvoiced = invoices.reduce((sum, inv) => sum + inv.totalAmount, 0);
+    const totalPaid = clientPayments.reduce((sum, p) => sum + p.amount, 0);
+    const balanceDue = totalInvoiced - totalPaid;
+
+    return { totalInvoiced, totalPaid, balanceDue };
+  }, [data.documents, data.payments, data.currentTenant]);
+
+  const updateFiscalSettings = useCallback((tenant: string, settings: FiscalSettings) => {
+    setData(prev => ({
+      ...prev,
+      fiscalSettings: {
+        ...(prev.fiscalSettings || {}),
+        [tenant]: settings
+      }
+    }));
+  }, []);
+
   // Filter data based on current tenant
   const tenantData = {
     ...data,
-    quotes: (data.quotes || []).filter(q => !data.currentTenant || q.tenant === data.currentTenant),
     deals: (data.deals || []).filter(d => !data.currentTenant || d.tenant === data.currentTenant),
-    invoices: (data.invoices || []).filter(i => !data.currentTenant || i.tenant === data.currentTenant),
     tasks: (data.tasks || []).filter(t => !data.currentTenant || t.tenant === data.currentTenant),
     employees: (data.employees || []).filter(e => !data.currentTenant || e.tenant === data.currentTenant),
     activityLogs: (data.activityLogs || []).filter(l => !data.currentTenant || l.tenant === data.currentTenant),
-    // Companies, Contacts, Notes and Products are globally accessible
+    documents: (data.documents || []).filter(d => !data.currentTenant || d.tenant === data.currentTenant),
+    payments: (data.payments || []).filter(p => !data.currentTenant || p.tenant === data.currentTenant),
+    stockMovements: (data.stockMovements || []).filter(s => !data.currentTenant || s.tenant === data.currentTenant),
     products: data.products || [],
     notes: data.notes || [],
   };
@@ -410,15 +596,16 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
       setCurrentUserId, setCurrentTenant, addEmployee, updateEmployee, deleteEmployee,
       addCompany, updateCompany, deleteCompany, getCompany,
       addContact, updateContact, deleteContact,
-      addInvoice, updateInvoice, deleteInvoice, markAsPaid, getInvoicesForCompany,
+      getInvoicesForCompany,
       updateReminderSettings, getOverdueInvoices,
       getTotalUnpaid, getTotalPaid,
       addProduct, updateProduct, deleteProduct,
-      addQuote, updateQuote, deleteQuote, convertQuoteToInvoice,
       addDeal, updateDeal, deleteDeal,
       addTask, updateTask, deleteTask,
       addNote, deleteNote, addActivityLog,
-      setNotificationRead
+      setNotificationRead,
+      addDocument, updateDocument, deleteDocument, addPayment, getClientSituation,
+      addStockMovement, updateFiscalSettings
     }}>
       {children}
     </CRMContext.Provider>

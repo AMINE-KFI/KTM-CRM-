@@ -11,10 +11,14 @@ import {
 import { exportProductsToExcel, parseProductsExcel, downloadProductTemplate } from '@/lib/excel';
 import { exportProductsToPDF } from '@/lib/pdf';
 import { useRef } from 'react';
+import ProductForm from './ProductForm';
+import type { Product } from '@/types';
 
 export default function Products() {
   const { data, currentTenant, addProduct, updateProduct, deleteProduct } = useCRM();
   const [search, setSearch] = useState('');
+  const [isFormOpen, setIsFormOpen] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<Product | undefined>(undefined);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleImportExcel = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -43,37 +47,13 @@ export default function Products() {
   ).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
   const handleAdd = () => {
-    const name = prompt('Nom du produit/service :');
-    if (!name) return;
-    const priceStr = prompt(`Prix HT (pour ${currentTenant === 'katamine' ? 'Katamine' : 'KL Tools'}) :`);
-    const price = parseFloat(priceStr || '0');
-    if (isNaN(price)) return;
-    const description = prompt('Description (optionnelle) :') || undefined;
-    
-    addProduct({
-      name,
-      price, // default fallback
-      prices: currentTenant ? { [currentTenant]: price } : undefined,
-      description,
-      vatRate: 19 // Default
-    });
+    setEditingProduct(undefined);
+    setIsFormOpen(true);
   };
 
-  const handleEditPrice = (prodId: string, currentPrice: number) => {
-    const priceStr = prompt(`Nouveau prix HT (pour ${currentTenant === 'katamine' ? 'Katamine' : 'KL Tools'}) :`, currentPrice.toString());
-    if (!priceStr) return;
-    const price = parseFloat(priceStr);
-    if (isNaN(price)) return;
-    
-    const prod = data.products.find(p => p.id === prodId);
-    if (prod && currentTenant) {
-      updateProduct(prodId, {
-        prices: {
-          ...(prod.prices || {}),
-          [currentTenant]: price
-        }
-      });
-    }
+  const handleEdit = (prod: Product) => {
+    setEditingProduct(prod);
+    setIsFormOpen(true);
   };
 
   const getDisplayPrice = (prod: any) => {
@@ -151,24 +131,35 @@ export default function Products() {
           {filtered.map(prod => {
             const displayPrice = getDisplayPrice(prod);
             const isCustomPrice = currentTenant && prod.prices && prod.prices[currentTenant] !== undefined;
+            const stock = currentTenant && prod.stock ? (prod.stock[currentTenant] || 0) : 0;
 
             return (
               <Card key={prod.id} className="border border-gray-100 shadow-sm">
                 <CardContent className="p-4">
                   <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 sm:gap-2">
                     <div className="flex-1 w-full min-w-0">
-                      <h3 className="font-semibold text-gray-900 truncate">{prod.name}</h3>
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-semibold text-gray-900 truncate">{prod.name}</h3>
+                        {prod.brand && (
+                          <span className="text-[10px] uppercase tracking-wider px-2 py-0.5 bg-gray-100 text-gray-600 rounded">
+                            {prod.brand}
+                          </span>
+                        )}
+                      </div>
                       {prod.description && <p className="text-sm text-gray-500 mt-1 truncate">{prod.description}</p>}
                       <div className="mt-3 flex items-center gap-3 text-xs text-gray-400">
                         <span>Ajouté le {formatDate(prod.createdAt)}</span>
                         <span>TVA : {prod.vatRate}%</span>
+                        <span className={`px-2 py-0.5 rounded-full font-medium ${stock > 0 ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
+                          En stock : {stock}
+                        </span>
                       </div>
                     </div>
                     <div className="flex items-center gap-4 w-full sm:w-auto justify-between sm:justify-end border-t border-gray-100 sm:border-0 pt-3 sm:pt-0">
                       <div className="text-left sm:text-right">
                         <div className="flex items-center gap-2 justify-start sm:justify-end">
                           <p className="font-bold text-gray-900">{formatCurrency(displayPrice)} <span className="text-[10px] font-normal text-gray-500">HT</span></p>
-                          <button onClick={() => handleEditPrice(prod.id, displayPrice)} className="text-gray-400 hover:text-gray-900">
+                          <button onClick={() => handleEdit(prod)} className="text-gray-400 hover:text-gray-900">
                             <Edit2 className="w-3 h-3" />
                           </button>
                         </div>
@@ -187,6 +178,11 @@ export default function Products() {
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem
+                            onClick={() => handleEdit(prod)}
+                          >
+                            Modifier
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
                             onClick={() => { if (confirm('Supprimer ce produit (de toutes les entités) ?')) deleteProduct(prod.id); }}
                             className="text-red-600"
                           >
@@ -201,6 +197,13 @@ export default function Products() {
             );
           })}
         </div>
+      )}
+
+      {isFormOpen && (
+        <ProductForm 
+          product={editingProduct} 
+          onClose={() => { setIsFormOpen(false); setEditingProduct(undefined); }} 
+        />
       )}
     </div>
   );

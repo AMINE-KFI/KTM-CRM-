@@ -1,6 +1,6 @@
 import type { CRMData, ReminderSettings } from '../types';
 
-const STORAGE_KEY = 'katamine_crm_data';
+const STORAGE_KEY = 'katamine_crm_data_v3';
 
 const defaultSettings: ReminderSettings = {
   enabled: true,
@@ -13,58 +13,9 @@ const defaultSettings: ReminderSettings = {
 };
 
 const defaultData: CRMData = {
-  companies: [
-    {
-      id: 'demo-1',
-      name: 'TECHNO SOLUTIONS SAS',
-      legalForm: 'SAS',
-      nif: '000012345678900',
-      nis: '123456789012345',
-      rc: '12/00-0123456 B 20',
-      address: '15 Rue de la République',
-      city: 'Paris',
-      postalCode: '75001',
-      country: 'France',
-      fiscalYear: '01/01 - 31/12',
-      art: '1201234567',
-      capital: '50 000 €',
-      email: 'contact@technosolutions.fr',
-      phone: '01 23 45 67 89',
-      website: 'www.technosolutions.fr',
-      notes: 'Client depuis 2022. Paiement généralement à 30 jours.',
-      createdAt: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString(),
-      contacts: [
-        {
-          id: 'c-1',
-          firstName: 'Marie',
-          lastName: 'DUPONT',
-          email: 'marie.dupont@technosolutions.fr',
-          phone: '01 23 45 67 90',
-          mobile: '06 12 34 56 78',
-          position: 'Responsable Approvisionnement',
-          department: 'approvisionnement',
-          notes: 'Contact principal pour les commandes',
-          companyId: 'demo-1',
-          createdAt: new Date(Date.now() - 85 * 24 * 60 * 60 * 1000).toISOString(),
-        },
-      ],
-    }
-  ],
+  companies: [],
   invoices: [],
-  products: [
-    {
-      id: 'prod-1',
-      name: 'Prestation de service - Journée',
-      description: 'Consulting technique (par jour)',
-      price: 50000,
-      prices: {
-        katamine: 50000,
-        kltools: 45000
-      },
-      vatRate: 19,
-      createdAt: new Date(Date.now() - 100 * 24 * 60 * 60 * 1000).toISOString(),
-    }
-  ],
+  products: [],
   quotes: [],
   deals: [],
   tasks: [],
@@ -98,6 +49,10 @@ const defaultData: CRMData = {
   currentUserId: null,
   currentTenant: null,
   reminderSettings: defaultSettings,
+  fiscalSettings: {
+    katamine: { companyName: 'Katamine', address: '', rc: '', nif: '', nis: '', art: '', capital: '', phone: '', email: '', bankInfo: '' },
+    kltools: { companyName: 'KL Tools', address: '', rc: '', nif: '', nis: '', art: '', capital: '', phone: '', email: '', bankInfo: '' }
+  }
 };
 
 export function loadData(): CRMData {
@@ -158,7 +113,7 @@ export function formatCurrency(amount: number): string {
   return new Intl.NumberFormat('fr-DZ', {
     style: 'currency',
     currency: 'DZD',
-  }).format(amount);
+  }).format(amount).replace(/[\u202F\u00A0]/g, ' ');
 }
 
 export function formatDate(dateStr: string): string {
@@ -176,8 +131,10 @@ export function formatDateTime(dateStr: string): string {
   }).format(date);
 }
 
-export function getDaysOverdue(dueDate: string): number {
+export function getDaysOverdue(dueDate: string | undefined): number {
+  if (!dueDate) return 0;
   const due = new Date(dueDate);
+  if (isNaN(due.getTime())) return 0;
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   due.setHours(0, 0, 0, 0);
