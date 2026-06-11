@@ -6,15 +6,20 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Slider } from '@/components/ui/slider';
-import { Mail, Bell, Save, CheckCircle, AlertCircle, FileText, Building2 } from 'lucide-react';
+import { Mail, Bell, Save, CheckCircle, AlertCircle, FileText, Building2, FolderArchive, Plus, Download, Loader2 } from 'lucide-react';
 import type { ReminderSettings, FiscalSettings } from '@/types';
 import { formatCurrency, getDaysOverdue, sendReminderEmail } from '@/lib/storage';
 import { useEffect } from 'react';
+import JSZip from 'jszip';
+import { generateDocumentPDF } from '@/lib/pdf';
+import { getCompaniesExcelBlob, getProductsExcelBlob, getCreancesExcelBlob, getPaymentsExcelBlob } from '@/lib/excel';
 
 export default function SettingsPage() {
-  const { data, updateReminderSettings, updateInvoice, getOverdueInvoices, currentTenant, updateFiscalSettings } = useCRM();
+  const { data, updateReminderSettings, updateInvoice, getOverdueInvoices, currentTenant, updateFiscalSettings, startNewYear } = useCRM();
   const [settings, setSettings] = useState<ReminderSettings>({ ...data.reminderSettings });
   const [saved, setSaved] = useState(false);
+  const [newYearId, setNewYearId] = useState('');
+  const [isExporting, setIsExporting] = useState(false);
 
   const [fiscalSettings, setFiscalSettings] = useState<FiscalSettings>({
     tenant: currentTenant || 'katamine',
@@ -103,12 +108,133 @@ export default function SettingsPage() {
     });
   };
 
+  const handleCreateYear = () => {
+    if (!newYearId.trim()) return;
+    if (confirm(`Êtes-vous sûr de vouloir ouvrir l'exercice ${newYearId} ?\nLes factures impayées, devis/BL en attente, affaires en cours et tâches non terminées de l'exercice actuel y seront dupliqués (Report à nouveau).`)) {
+      startNewYear(newYearId.trim(), newYearId.trim());
+      setNewYearId('');
+    }
+  };
+
+  const handleExportYear = async (yearId: string) => {
+    setIsExporting(true);
+    try {
+      const defaultYearId = new Date().getFullYear().toString();
+      const isTargetYear = (itemYear: string | undefined) => (itemYear || defaultYearId) === yearId;
+      
+      const yearDocs = (data.documents || []).filter(d => isTargetYear(d.fiscalYear) && (!currentTenant || d.tenant === currentTenant));
+      const yearPayments = (data.payments || []).filter(p => isTargetYear(p.fiscalYear) && (!currentTenant || p.tenant === currentTenant));
+      
+      const zip = new JSZip();
+
+      const facturesFolder = zip.folder("factures");
+      const blFolder = zip.folder("bl");
+      const bcFolder = zip.folder("bc");
+      const proformaFolder = zip.folder("proforma");
+
+      for (const doc of yearDocs) {
+        const company = data.companies.find(c => c.id === doc.companyId);
+        if (!company) continue;
+
+        const totalPaid = yearPayments.filter(p => p.documentId === doc.id).reduce((s, p) => s + p.amount, 0);
+        const fSettings = data.fiscalSettings ? data.fiscalSettings[doc.tenant || currentTenant || 'katamine'] : undefined;
+        
+        const pdfBlob = generateDocumentPDF(doc, company, fSettings, totalPaid, true) as Blob;
+        const fileName = `${doc.reference}.pdf`.replace(/[^a-zA-Z0-9.-]/g, '_');
+        
+        if (doc.type === 'invoice' && facturesFolder) facturesFolder.file(fileName, pdfBlob);
+        else if (doc.type === 'delivery_note' && blFolder) blFolder.file(fileName, pdfBlob);
+        else if (doc.type === 'purchase_order' && bcFolder) bcFolder.file(fileName, pdfBlob);
+        else if (doc.type === 'proforma' && proformaFolder) proformaFolder.file(fileName, pdfBlob);
+      }
+
+      const companiesBlob = getCompaniesExcelBlob(data.companies);
+      zip.file("clients_fournisseurs.xlsx", companiesBlob);
+
+      const productsBlob = getProductsExcelBlob(data.products || []);
+      zip.file("catalogue.xlsx", productsBlob);
+
+      const creancesBlob = getCreancesExcelBlob(yearDocs, yearPayments, data.companies);
+      zip.file("creances.xlsx", creancesBlob);
+
+      const paymentsBlob = getPaymentsExcelBlob(yearPayments, yearDocs, data.companies);
+      zip.file("paiements.xlsx", paymentsBlob);
+
+      const zipBlob = await zip.generateAsync({ type: 'blob' });
+      const url = URL.createObjectURL(zipBlob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `dossier_exercice_${yearId}_${currentTenant || 'global'}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error("Error during ZIP generation", error);
+      alert("Une erreur s'est produite lors de la génération de l'archive.");
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Paramètres</h1>
         <p className="text-gray-500 text-sm mt-0.5">Configurez les rappels automatiques et les informations de votre société</p>
       </div>
+
+      {/* Gestion des Exercices */}
+      <Card className="border border-gray-100 shadow-sm">
+        <CardHeader className="pt-5 pb-3 px-5">
+          <CardTitle className="text-base font-semibold flex items-center gap-2">
+            <FolderArchive className="w-5 h-5 text-indigo-600" />
+            Gestion des Exercices Comptables
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="px-5 pb-5 space-y-4">
+          <div className="bg-indigo-50 border border-indigo-100 p-4 rounded-xl">
+            <h3 className="font-semibold text-indigo-900 mb-2">Ouvrir un nouvel exercice (Report à nouveau)</h3>
+            <p className="text-sm text-indigo-700 mb-4">
+              La création d'un nouvel exercice dupliquera automatiquement les factures impayées, les affaires en cours et les tâches non terminées depuis l'exercice actuel vers le nouveau.
+            </p>
+            <div className="flex items-center gap-3">
+              <Input 
+                value={newYearId} 
+                onChange={e => setNewYearId(e.target.value)} 
+                placeholder="Ex: 2027" 
+                className="w-32 bg-white"
+              />
+              <Button onClick={handleCreateYear} className="bg-indigo-600 hover:bg-indigo-700 text-white gap-2">
+                <Plus className="w-4 h-4" />
+                Ouvrir l'exercice
+              </Button>
+            </div>
+          </div>
+
+          <div>
+            <h3 className="text-sm font-semibold text-gray-700 mb-3">Exercices existants :</h3>
+            <div className="flex flex-wrap gap-2">
+              {(data.fiscalYears || [{ id: data.currentYearId, label: data.currentYearId, isClosed: false }]).map(y => (
+                <div key={y.id} className="px-3 py-1.5 bg-gray-100 text-gray-800 rounded-lg text-sm font-medium flex items-center gap-2 border border-gray-200 shadow-sm group">
+                  <FolderArchive className="w-4 h-4 text-gray-500" />
+                  {y.label}
+                  {data.currentYearId === y.id && <span className="ml-1 px-1.5 py-0.5 bg-indigo-100 text-indigo-700 text-[10px] uppercase rounded font-bold">Actif</span>}
+                  
+                  <button 
+                    onClick={() => handleExportYear(y.id)}
+                    disabled={isExporting}
+                    className="ml-2 p-1 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors disabled:opacity-50"
+                    title={`Télécharger l'archive ZIP (${y.label})`}
+                  >
+                    {isExporting ? <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-600" /> : <Download className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Fiscal Settings */}
       <Card className="border border-gray-100 shadow-sm">

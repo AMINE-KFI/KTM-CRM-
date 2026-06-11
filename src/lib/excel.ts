@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx';
-import type { Company, Product } from '../types';
+import type { Company, Product, BusinessDocument, Payment } from '../types';
 
 // ==========================================
 // CLIENTS (COMPANIES)
@@ -63,6 +63,31 @@ export function exportCompaniesToExcel(companies: Company[]) {
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Clients');
   XLSX.writeFile(wb, 'clients_export.xlsx');
+}
+
+export function getCompaniesExcelBlob(companies: Company[]): Blob {
+  const data = companies.map(c => ({
+    'Nom': c.name,
+    'Forme Juridique': c.legalForm || '',
+    'NIF': c.nif || '',
+    'NIS': c.nis || '',
+    'RC': c.rc || '',
+    'Adresse': c.address || '',
+    'Ville': c.city || '',
+    'Code Postal': c.postalCode || '',
+    'Pays': c.country || '',
+    'Email': c.email || '',
+    'Téléphone': c.phone || '',
+    'Site Web': c.website || '',
+    'Contacts (Nombre)': c.contacts?.length || 0,
+    'Date de création': new Date(c.createdAt).toLocaleDateString('fr-FR')
+  }));
+
+  const ws = XLSX.utils.json_to_sheet(data);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Clients');
+  const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+  return new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
 }
 
 export function parseCompaniesExcel(file: File): Promise<Partial<Company>[]> {
@@ -139,6 +164,71 @@ export function exportProductsToExcel(products: Product[]) {
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Catalogue');
   XLSX.writeFile(wb, 'catalogue_export.xlsx');
+}
+
+export function getProductsExcelBlob(products: Product[]): Blob {
+  const data = products.map(p => ({
+    'Nom': p.name,
+    'Description': p.description || '',
+    'Prix par défaut HT': p.price,
+    'Prix Katamine HT': p.prices?.katamine || p.price,
+    'Prix KL Tools HT': p.prices?.kltools || p.price,
+    'TVA (%)': p.vatRate,
+    'Date de création': new Date(p.createdAt).toLocaleDateString('fr-FR')
+  }));
+
+  const ws = XLSX.utils.json_to_sheet(data);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Catalogue');
+  const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+  return new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+}
+
+export function getCreancesExcelBlob(documents: BusinessDocument[], payments: Payment[], companies: Company[]): Blob {
+  const invoices = documents.filter(d => d.type === 'invoice' && d.status !== 'cancelled');
+  const data = invoices.map(inv => {
+    const company = companies.find(c => c.id === inv.companyId);
+    const totalPaid = payments.filter(p => p.documentId === inv.id).reduce((sum, p) => sum + p.amount, 0);
+    const balance = inv.totalAmount - totalPaid;
+    return {
+      'Date': new Date(inv.createdAt).toLocaleDateString('fr-FR'),
+      'N° Facture': inv.reference,
+      'Client': company?.name || 'Inconnu',
+      'NIF Client': company?.nif || '',
+      'Montant TTC': inv.totalAmount,
+      'Payé': totalPaid,
+      'Reste à payer': balance,
+      'Statut': balance <= 0 ? 'Soldé' : (totalPaid > 0 ? 'Partiel' : 'Impayé')
+    };
+  });
+
+  const ws = XLSX.utils.json_to_sheet(data);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Créances');
+  const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+  return new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+}
+
+export function getPaymentsExcelBlob(payments: Payment[], documents: BusinessDocument[], companies: Company[]): Blob {
+  const data = payments.map(p => {
+    const doc = documents.find(d => d.id === p.documentId);
+    const company = doc ? companies.find(c => c.id === doc.companyId) : undefined;
+    return {
+      'Date': new Date(p.date).toLocaleDateString('fr-FR'),
+      'Référence Paiement': p.reference || '-',
+      'Méthode': p.method,
+      'Montant': p.amount,
+      'N° Facture': doc?.reference || '-',
+      'Client': company?.name || 'Inconnu',
+      'Notes': p.notes || ''
+    };
+  });
+
+  const ws = XLSX.utils.json_to_sheet(data);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Paiements');
+  const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+  return new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
 }
 
 export function parseProductsExcel(file: File): Promise<Partial<Product>[]> {

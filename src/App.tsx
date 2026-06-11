@@ -18,7 +18,7 @@ import { LayoutDashboard, Building2, FileText, Settings, Menu, X, Package, Targe
 type Page = 'dashboard' | 'companies' | 'pipeline' | 'products' | 'tasks' | 'team' | 'settings' | 'documents' | 'suppliers' | 'payments';
 
 function AppLayout() {
-  const { currentUser, currentTenant, setCurrentUserId, setCurrentTenant } = useCRM();
+  const { data, currentUser, currentTenant, setCurrentUserId, setCurrentTenant, setCurrentYearId } = useCRM();
   const [page, setPage] = useState<Page>('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showPopup, setShowPopup] = useState(true);
@@ -147,6 +147,20 @@ function AppLayout() {
           <div className="hidden lg:block" /> {/* Spacer */}
           
           <div className="flex items-center gap-4 ml-auto">
+            {/* Sélecteur d'année */}
+            <div className="hidden sm:flex items-center gap-2 mr-2">
+              <span className="text-xs font-semibold text-gray-400 uppercase">Exercice:</span>
+              <select 
+                value={data.currentYearId}
+                onChange={(e) => setCurrentYearId(e.target.value)}
+                className="bg-gray-50 border border-gray-200 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block px-2.5 py-1.5 font-bold shadow-sm"
+              >
+                {(data.fiscalYears || [{ id: data.currentYearId, label: data.currentYearId }]).map(y => (
+                  <option key={y.id} value={y.id}>{y.label}</option>
+                ))}
+              </select>
+            </div>
+
             <div className="text-right hidden sm:block">
               <p className="text-sm font-bold text-gray-900">{currentUser.firstName} {currentUser.lastName}</p>
               <p className="text-xs text-gray-500">{isAdmin ? 'Gérant' : 'Employé'}</p>

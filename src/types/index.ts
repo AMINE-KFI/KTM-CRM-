@@ -64,6 +64,12 @@ export interface Product {
   createdAt: string;
 }
 
+export interface FiscalYear {
+  id: string;
+  label: string;
+  isClosed: boolean;
+}
+
 export type DealStage = 'lead' | 'proposal' | 'negotiation' | 'won' | 'lost';
 
 export interface Deal {
@@ -77,6 +83,7 @@ export interface Deal {
   assigneeIds?: string[];
   contactIds?: string[];
   tenant?: TenantType;
+  fiscalYear?: string;
   createdAt: string;
 }
 
@@ -103,6 +110,7 @@ export interface Task {
   contactId?: string;
   assigneeId?: string;
   tenant?: TenantType;
+  fiscalYear?: string;
   createdAt: string;
 }
 
@@ -120,6 +128,7 @@ export interface ActivityLog {
   description: string;
   userId: string;
   tenant?: TenantType;
+  fiscalYear?: string;
   createdAt: string;
 }
 
@@ -153,6 +162,7 @@ export interface BusinessDocument {
   linkedDocumentId?: string;
   linkedDocumentRef?: string;
   tenant: TenantType;
+  fiscalYear?: string;
   createdAt: string;
 }
 
@@ -165,6 +175,7 @@ export interface Payment {
   mode: 'cash' | 'check' | 'transfer' | 'traite';
   reference?: string;
   tenant: TenantType;
+  fiscalYear?: string;
 }
 
 export interface FiscalSettings {
@@ -207,4 +218,6 @@ export interface CRMData {
   stockMovements?: StockMovement[];
   documentCounters?: Record<string, number>;
   fiscalSettings?: Record<string, FiscalSettings>; // per tenant
+  fiscalYears?: FiscalYear[];
+  currentYearId?: string;
 }

@@ -153,7 +153,7 @@ export function exportProductsToPDF(products: Product[], tenant?: string | null)
   doc.save('catalogue_export.pdf');
 }
 
-export function generateDocumentPDF(docData: BusinessDocument, company: Company, fiscalSettings?: FiscalSettings, totalPaid: number = 0) {
+export function generateDocumentPDF(docData: BusinessDocument, company: Company, fiscalSettings?: FiscalSettings, totalPaid: number = 0, returnBlob: boolean = false): Blob | void {
   const doc = new jsPDF();
   const isKLTools = docData.tenant === 'kltools';
 
@@ -255,61 +255,103 @@ export function generateDocumentPDF(docData: BusinessDocument, company: Company,
     margin: { bottom: 80 }
   });
 
-  // 5. Totaux
+  // 5. Totaux et Pied de page
   let finalY = (doc as any).lastAutoTable.finalY + 10;
   
-  // Check if there is enough space for the footer, otherwise add a new page
-  if (finalY > 220) {
+  // Calculer la hauteur approximative requise pour le pied de page
+  let footerHeight = 35; // Base pour les totaux HT, TVA, TTC
+  if (totalPaid > 0) footerHeight += 25; // Lignes supplémentaires pour Payé, Reste, Soldé
+  
+  const amountInWords = numberToWordsFR(docData.totalAmount);
+  const amountLines = doc.splitTextToSize(amountInWords, 120);
+  const leftColHeight = 10 + (amountLines.length * 5); // Titre + texte
+  
+  let notesLines: string[] = [];
+  let notesHeight = 0;
+  if (docData.notes) {
+    notesLines = doc.splitTextToSize(docData.notes, 120);
+    notesHeight = 5 + (notesLines.length * 4);
+  }
+  
+  // Le bloc texte à gauche ou les totaux à droite, prendre le plus grand
+  const maxContentHeight = Math.max(footerHeight, leftColHeight + notesHeight);
+  // +15 pour les coordonnées bancaires en bas
+  const totalRequiredHeight = maxContentHeight + 15;
+
+  // Si ça risque de déborder de la page (hauteur A4 = ~297), on crée une nouvelle page
+  if (finalY + totalRequiredHeight > 285) {
     doc.addPage();
     finalY = 20;
   }
-  
+
+  // --- Colonne Droite: Totaux ---
+  let rightColY = finalY;
   doc.setFontSize(10);
-  doc.text('Total HT :', 160, finalY, { align: 'right' });
-  doc.text(formatCurrency(docData.subtotal), 196, finalY, { align: 'right' });
+  doc.setTextColor(0);
+  doc.text('Total HT :', 160, rightColY, { align: 'right' });
+  doc.text(formatCurrency(docData.subtotal), 196, rightColY, { align: 'right' });
+  rightColY += 7;
 
   const vatLabel = docData.vatAmount > 0 ? `TVA :` : 'TVA (Exonéré) :';
-  doc.text(vatLabel, 160, finalY + 7, { align: 'right' });
-  doc.text(formatCurrency(docData.vatAmount), 196, finalY + 7, { align: 'right' });
+  doc.text(vatLabel, 160, rightColY, { align: 'right' });
+  doc.text(formatCurrency(docData.vatAmount), 196, rightColY, { align: 'right' });
+  rightColY += 9;
 
   doc.setFontSize(12);
   doc.setFont('helvetica', 'bold');
-  doc.text('NET A PAYER :', 160, finalY + 16, { align: 'right' });
-  doc.text(formatCurrency(docData.totalAmount), 196, finalY + 16, { align: 'right' });
-
-  let wordsY = finalY + 30;
+  doc.text('NET A PAYER :', 160, rightColY, { align: 'right' });
+  doc.text(formatCurrency(docData.totalAmount), 196, rightColY, { align: 'right' });
+  rightColY += 8;
 
   if (totalPaid > 0) {
     doc.setFontSize(10);
     doc.setFont('helvetica', 'normal');
-    doc.text('Total Payé :', 160, finalY + 23, { align: 'right' });
-    doc.text(formatCurrency(totalPaid), 196, finalY + 23, { align: 'right' });
+    doc.text('Total Payé :', 160, rightColY, { align: 'right' });
+    doc.text(formatCurrency(totalPaid), 196, rightColY, { align: 'right' });
+    rightColY += 6;
     
     const balance = docData.totalAmount - totalPaid;
     doc.setFont('helvetica', 'bold');
-    doc.text('Reste à Payer :', 160, finalY + 29, { align: 'right' });
-    doc.text(formatCurrency(balance > 0 ? balance : 0), 196, finalY + 29, { align: 'right' });
+    doc.text('Reste à Payer :', 160, rightColY, { align: 'right' });
+    doc.text(formatCurrency(balance > 0 ? balance : 0), 196, rightColY, { align: 'right' });
+    rightColY += 10;
 
     if (balance <= 0) {
       doc.setTextColor(39, 174, 96);
       doc.setFontSize(14);
-      doc.text('FACTURE SOLDÉE', 196, finalY + 38, { align: 'right' });
+      doc.text('FACTURE SOLDÉE', 196, rightColY, { align: 'right' });
       doc.setTextColor(0);
-      wordsY += 15;
-    } else {
-      wordsY += 10;
+      rightColY += 10;
     }
   }
 
-  // Montant en lettres
+  // --- Colonne Gauche: Textes ---
+  let leftColY = finalY;
+  
   doc.setFontSize(10);
   doc.setFont('helvetica', 'italic');
-  doc.text('Arrêté la présente facture à la somme de :', 14, wordsY);
+  doc.setTextColor(0);
+  doc.text('Arrêté la présente facture à la somme de :', 14, leftColY);
+  leftColY += 5;
+  
   doc.setFont('helvetica', 'bolditalic');
-  const amountInWords = numberToWordsFR(docData.totalAmount);
-  doc.text(amountInWords, 14, wordsY + 5, { maxWidth: 120 });
+  doc.text(amountLines, 14, leftColY);
+  leftColY += (amountLines.length * 5) + 5;
 
-  // Bank Details
+  if (docData.notes) {
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(100);
+    doc.text('Notes / Conditions :', 14, leftColY);
+    leftColY += 5;
+    doc.text(notesLines, 14, leftColY);
+    leftColY += (notesLines.length * 4) + 5;
+  }
+
+  // --- Pied de page: Coordonnées Bancaires ---
+  // On place les coordonnées bancaires sous la colonne la plus longue
+  let bankY = Math.max(rightColY, leftColY) + 5;
+
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9);
   doc.setTextColor(50);
@@ -321,18 +363,12 @@ export function generateDocumentPDF(docData: BusinessDocument, company: Company,
       ? 'Coordonnées Bancaires:\nBanque: BNA\nRIB: 001 00123 4567891234 56'
       : 'Coordonnées Bancaires:\nBanque: CPA\nRIB: 004 00456 1234567890 12';
   }
-  doc.text(bankDetails, 140, finalY + 30);
-
-  // 6. Notes
-  if (docData.notes) {
-    doc.setFontSize(9);
-    doc.setFont('helvetica', 'normal');
-    doc.setTextColor(100);
-    doc.text('Notes / Conditions :', 14, finalY + 50);
-    doc.text(docData.notes, 14, finalY + 55, { maxWidth: 100 });
-  }
+  doc.text(bankDetails, 14, bankY);
 
   const pdfBlob = doc.output('blob');
+  if (returnBlob) {
+    return pdfBlob;
+  }
   const pdfUrl = URL.createObjectURL(pdfBlob);
   window.open(pdfUrl, '_blank');
 }

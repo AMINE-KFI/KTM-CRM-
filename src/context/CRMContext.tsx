@@ -9,6 +9,8 @@ interface CRMContextType {
   currentTenant: TenantType | null;
   setCurrentUserId: (id: string | null) => void;
   setCurrentTenant: (tenant: TenantType | null) => void;
+  setCurrentYearId: (yearId: string) => void;
+  startNewYear: (newYearId: string, label: string) => void;
   // Employees
   addEmployee: (emp: Omit<Employee, 'id' | 'createdAt'>) => Employee;
   updateEmployee: (id: string, updates: Partial<Employee>) => void;
@@ -205,7 +207,7 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
   const addDeal = useCallback((deal: Omit<Deal, 'id' | 'createdAt'>): Deal => {
     let newDeal: Deal | null = null;
     setData(prev => {
-      newDeal = { ...deal, id: generateId(), createdAt: new Date().toISOString(), tenant: prev.currentTenant || undefined };
+      newDeal = { ...deal, id: generateId(), createdAt: new Date().toISOString(), tenant: prev.currentTenant || undefined, fiscalYear: prev.currentYearId || new Date().getFullYear().toString() };
       return { ...prev, deals: [...(prev.deals || []), newDeal] };
     });
     return newDeal || ({} as Deal);
@@ -222,7 +224,7 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
   const addTask = useCallback((task: Omit<Task, 'id' | 'createdAt'>): Task => {
     let newTask: Task | null = null;
     setData(prev => {
-      newTask = { ...task, id: generateId(), createdAt: new Date().toISOString(), tenant: prev.currentTenant || undefined };
+      newTask = { ...task, id: generateId(), createdAt: new Date().toISOString(), tenant: prev.currentTenant || undefined, fiscalYear: prev.currentYearId || new Date().getFullYear().toString() };
       return { ...prev, tasks: [...(prev.tasks || []), newTask] };
     });
     return newTask || ({} as Task);
@@ -254,6 +256,92 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
     setData(prev => ({ ...prev, currentTenant: tenant }));
   }, []);
 
+  const setCurrentYearId = useCallback((yearId: string) => {
+    setData(prev => ({ ...prev, currentYearId: yearId }));
+  }, []);
+
+  const startNewYear = useCallback((newYearId: string, label: string) => {
+    setData(prev => {
+      if (prev.fiscalYears?.find(y => y.id === newYearId)) {
+        alert("Cette année existe déjà.");
+        return prev;
+      }
+
+      const currentYearId = prev.currentYearId || new Date().getFullYear().toString();
+      
+      const newFiscalYear = { id: newYearId, label, isClosed: false };
+      const newYearsList = [...(prev.fiscalYears || [{ id: currentYearId, label: currentYearId, isClosed: false }]), newFiscalYear];
+
+      // Option B : Duplication
+      // 1. Documents (Factures impayées/partielles, Devis/BL en brouillon ou validés non facturés)
+      const docsToDuplicate = (prev.documents || []).filter(d => 
+        (d.fiscalYear || currentYearId) === currentYearId &&
+        (
+          (d.type === 'invoice' && d.status !== 'paid' && d.status !== 'cancelled') ||
+          (d.type === 'proforma' && d.status !== 'cancelled') ||
+          (d.type === 'delivery_note' && d.status !== 'cancelled')
+        )
+      );
+
+      const duplicatedDocs = docsToDuplicate.map(d => ({
+        ...d,
+        id: generateId(), // New ID
+        fiscalYear: newYearId,
+        createdAt: new Date().toISOString()
+      }));
+
+      // Map old document IDs to new document IDs to duplicate payments
+      const docIdMap = new Map(docsToDuplicate.map((d, i) => [d.id, duplicatedDocs[i].id]));
+
+      // 2. Payments (only for the duplicated invoices to preserve the "reste à payer")
+      const paymentsToDuplicate = (prev.payments || []).filter(p => 
+        (p.fiscalYear || currentYearId) === currentYearId && docIdMap.has(p.documentId)
+      );
+
+      const duplicatedPayments = paymentsToDuplicate.map(p => ({
+        ...p,
+        id: generateId(),
+        documentId: docIdMap.get(p.documentId)!,
+        fiscalYear: newYearId
+      }));
+
+      // 3. Deals (Pipeline en cours : lead, proposal, negotiation)
+      const dealsToDuplicate = (prev.deals || []).filter(d => 
+        (d.fiscalYear || currentYearId) === currentYearId &&
+        ['lead', 'proposal', 'negotiation'].includes(d.stage)
+      );
+
+      const duplicatedDeals = dealsToDuplicate.map(d => ({
+        ...d,
+        id: generateId(),
+        fiscalYear: newYearId,
+        createdAt: new Date().toISOString()
+      }));
+
+      // 4. Tasks (Non terminées)
+      const tasksToDuplicate = (prev.tasks || []).filter(t => 
+        (t.fiscalYear || currentYearId) === currentYearId && !t.completed
+      );
+
+      const duplicatedTasks = tasksToDuplicate.map(t => ({
+        ...t,
+        id: generateId(),
+        fiscalYear: newYearId,
+        createdAt: new Date().toISOString()
+      }));
+
+      return {
+        ...prev,
+        fiscalYears: newYearsList,
+        currentYearId: newYearId,
+        documents: [...(prev.documents || []), ...duplicatedDocs],
+        payments: [...(prev.payments || []), ...duplicatedPayments],
+        deals: [...(prev.deals || []), ...duplicatedDeals],
+        tasks: [...(prev.tasks || []), ...duplicatedTasks]
+      };
+    });
+  }, []);
+
   const addEmployee = useCallback((emp: Omit<Employee, 'id' | 'createdAt'>): Employee => {
     let newEmp: Employee | null = null;
     setData(prev => {
@@ -278,6 +366,7 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
         id: generateId(),
         createdAt: new Date().toISOString(),
         tenant: prev.currentTenant || undefined,
+        fiscalYear: prev.currentYearId || new Date().getFullYear().toString(),
       };
       return { ...prev, activityLogs: [newLog, ...(prev.activityLogs || [])].slice(0, 50) }; // Keep last 50
     });
@@ -338,7 +427,8 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
         id: generateId(), 
         reference,
         createdAt: new Date().toISOString(), 
-        tenant 
+        tenant,
+        fiscalYear: prev.currentYearId || new Date().getFullYear().toString()
       };
 
       let newMovements = [...(prev.stockMovements || [])];
@@ -487,7 +577,7 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
   const addPayment = useCallback((payment: Omit<Payment, 'id'>): Payment => {
     let newPayment: Payment | null = null;
     setData(prev => {
-      newPayment = { ...payment, id: generateId(), tenant: prev.currentTenant || payment.tenant };
+      newPayment = { ...payment, id: generateId(), tenant: prev.currentTenant || payment.tenant, fiscalYear: prev.currentYearId || new Date().getFullYear().toString() };
       const newPaymentsList = [...(prev.payments || []), newPayment];
       let newDocs = [...(prev.documents || [])];
 
@@ -554,20 +644,6 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
     }));
   }, []);
 
-  // Filter data based on current tenant
-  const tenantData = {
-    ...data,
-    deals: (data.deals || []).filter(d => !data.currentTenant || d.tenant === data.currentTenant),
-    tasks: (data.tasks || []).filter(t => !data.currentTenant || t.tenant === data.currentTenant),
-    employees: (data.employees || []).filter(e => !data.currentTenant || e.tenant === data.currentTenant),
-    activityLogs: (data.activityLogs || []).filter(l => !data.currentTenant || l.tenant === data.currentTenant),
-    documents: (data.documents || []).filter(d => !data.currentTenant || d.tenant === data.currentTenant),
-    payments: (data.payments || []).filter(p => !data.currentTenant || p.tenant === data.currentTenant),
-    stockMovements: (data.stockMovements || []).filter(s => !data.currentTenant || s.tenant === data.currentTenant),
-    products: data.products || [],
-    notes: data.notes || [],
-  };
-
   const setNotificationRead = useCallback((notificationId: string, isRead: boolean) => {
     setData(prev => {
       const userId = prev.currentUserId;
@@ -588,12 +664,41 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
+  // Filter data based on current tenant and current year
+  const defaultYearId = new Date().getFullYear().toString();
+  const currentYearId = data.currentYearId || defaultYearId;
+  const fiscalYears = data.fiscalYears && data.fiscalYears.length > 0 
+    ? data.fiscalYears 
+    : [{ id: defaultYearId, label: defaultYearId, isClosed: false }];
+
+  const filterByTenantAndYear = <T extends { tenant?: TenantType, fiscalYear?: string }>(items: T[]) => {
+    return items.filter(item => 
+      (!data.currentTenant || item.tenant === data.currentTenant) &&
+      (item.fiscalYear || defaultYearId) === currentYearId
+    );
+  };
+
+  const tenantData = {
+    ...data,
+    currentYearId,
+    fiscalYears,
+    deals: filterByTenantAndYear(data.deals || []),
+    tasks: filterByTenantAndYear(data.tasks || []),
+    employees: (data.employees || []).filter(e => !data.currentTenant || e.tenant === data.currentTenant),
+    activityLogs: filterByTenantAndYear(data.activityLogs || []),
+    documents: filterByTenantAndYear(data.documents || []),
+    payments: filterByTenantAndYear(data.payments || []),
+    stockMovements: (data.stockMovements || []).filter(s => !data.currentTenant || s.tenant === data.currentTenant), // stock is global across years
+    products: data.products || [],
+    notes: data.notes || [],
+  };
+
   return (
     <CRMContext.Provider value={{
       data: tenantData,
       currentUser: (data.employees || []).find(e => e.id === data.currentUserId),
       currentTenant: data.currentTenant || null,
-      setCurrentUserId, setCurrentTenant, addEmployee, updateEmployee, deleteEmployee,
+      setCurrentUserId, setCurrentTenant, setCurrentYearId, startNewYear, addEmployee, updateEmployee, deleteEmployee,
       addCompany, updateCompany, deleteCompany, getCompany,
       addContact, updateContact, deleteContact,
       getInvoicesForCompany,
