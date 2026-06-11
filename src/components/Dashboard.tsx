@@ -21,20 +21,34 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
   const totalUnpaid = getTotalUnpaid();
   const totalPaid = getTotalPaid();
   
+  const tenantDocs = useMemo(() => (data.documents || []).filter(d => !data.currentTenant || d.tenant === data.currentTenant), [data.documents, data.currentTenant]);
+
   const stats = useMemo(() => {
     const totalCompanies = data.companies.filter(c => c.role === 'client' || !c.role || c.role === 'both').length;
     const totalContacts = (data.companies || []).reduce((sum, c) => sum + (c.contacts || []).length, 0);
-    const erpInvoices = (data.documents || []).filter((d: any) => d.type === 'invoice');
+    const erpInvoices = tenantDocs.filter((d: any) => d.type === 'invoice');
     const totalInvoices = erpInvoices.length;
     const unpaidInvoices = erpInvoices.filter((i: any) => i.status !== 'paid').length;
     const pipelineValue = (data.deals || []).filter(d => d.stage !== 'lost' && d.stage !== 'won').reduce((sum, d) => sum + d.value, 0);
-    const pendingQuotes = (data.documents || []).filter((d: any) => d.type === 'proforma' && (d.status === 'draft' || d.status === 'validated')).length;
-    
+    const pendingQuotes = tenantDocs.filter((d: any) => d.type === 'proforma' && (d.status === 'draft' || d.status === 'validated')).length;
     return { totalCompanies, totalContacts, totalInvoices, unpaidInvoices, pipelineValue, pendingQuotes };
-  }, [data]);
+  }, [data, tenantDocs]);
+
+  const financialStats = useMemo(() => {
+    const invoices = tenantDocs.filter((d: any) => d.type === 'invoice' && d.status !== 'cancelled');
+    const supplierInvoices = tenantDocs.filter((d: any) => d.type === 'supplier_invoice' && d.status !== 'cancelled');
+    
+    const totalSales = invoices.reduce((sum, d) => sum + d.totalAmount, 0);
+    const totalPurchases = supplierInvoices.reduce((sum, d) => sum + d.totalAmount, 0);
+    const totalExpenses = (data.expenses || []).reduce((sum, e) => sum + e.amount, 0);
+    
+    const netProfit = totalSales - totalPurchases - totalExpenses;
+    
+    return { totalSales, totalPurchases, totalExpenses, netProfit };
+  }, [data, tenantDocs]);
 
   const recentInvoices = useMemo(() => {
-    const erpInvoices = (data.documents || []).filter((d: any) => d.type === 'invoice');
+    const erpInvoices = tenantDocs.filter((d: any) => d.type === 'invoice');
     return [...erpInvoices]
       .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
       .slice(0, 5)
@@ -100,27 +114,51 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
       </div>
 
       {/* Financial Overview */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         <Card className="border border-emerald-100 shadow-sm bg-gradient-to-br from-emerald-50 to-green-50 overflow-hidden rounded-2xl relative cursor-pointer hover:shadow-md transition-all" onClick={() => onNavigate('documents')}>
           <div className="absolute -right-6 -bottom-6 opacity-10 pointer-events-none scale-150">
             <TrendingUp className="w-24 h-24 text-emerald-900" />
           </div>
           <CardContent className="p-5 sm:p-6 relative z-10">
             <div className="flex flex-col gap-1">
-              <p className="text-xs font-bold text-emerald-700 uppercase tracking-wider">Total Encaissé</p>
-              <p className="text-2xl sm:text-4xl font-bold text-emerald-900 mt-1 truncate">{formatCurrency(totalPaid)}</p>
+              <p className="text-xs font-bold text-emerald-700 uppercase tracking-wider">Chiffre d'Affaires</p>
+              <p className="text-2xl sm:text-3xl font-bold text-emerald-900 mt-1 truncate">{formatCurrency(financialStats.totalSales)}</p>
             </div>
           </CardContent>
         </Card>
         
-        <Card className="border border-red-100 shadow-sm bg-gradient-to-br from-red-50 to-orange-50 overflow-hidden rounded-2xl relative cursor-pointer hover:shadow-md transition-all" onClick={() => onNavigate('documents')}>
+        <Card className="border border-blue-100 shadow-sm bg-gradient-to-br from-blue-50 to-indigo-50 overflow-hidden rounded-2xl relative cursor-pointer hover:shadow-md transition-all" onClick={() => onNavigate('purchases')}>
           <div className="absolute -right-6 -bottom-6 opacity-10 pointer-events-none scale-150">
-            <TrendingDown className="w-24 h-24 text-red-900" />
+            <TrendingDown className="w-24 h-24 text-blue-900" />
           </div>
           <CardContent className="p-5 sm:p-6 relative z-10">
             <div className="flex flex-col gap-1">
-              <p className="text-xs font-bold text-red-700 uppercase tracking-wider">En attente de paiement</p>
-              <p className="text-2xl sm:text-4xl font-bold text-red-900 mt-1 truncate">{formatCurrency(totalUnpaid)}</p>
+              <p className="text-xs font-bold text-blue-700 uppercase tracking-wider">Achats Fournisseurs</p>
+              <p className="text-2xl sm:text-3xl font-bold text-blue-900 mt-1 truncate">{formatCurrency(financialStats.totalPurchases)}</p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border border-orange-100 shadow-sm bg-gradient-to-br from-orange-50 to-red-50 overflow-hidden rounded-2xl relative cursor-pointer hover:shadow-md transition-all" onClick={() => onNavigate('expenses')}>
+          <div className="absolute -right-6 -bottom-6 opacity-10 pointer-events-none scale-150">
+            <AlertCircle className="w-24 h-24 text-orange-900" />
+          </div>
+          <CardContent className="p-5 sm:p-6 relative z-10">
+            <div className="flex flex-col gap-1">
+              <p className="text-xs font-bold text-orange-700 uppercase tracking-wider">Charges / Dépenses</p>
+              <p className="text-2xl sm:text-3xl font-bold text-orange-900 mt-1 truncate">{formatCurrency(financialStats.totalExpenses)}</p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className={`border ${financialStats.netProfit >= 0 ? 'border-purple-100 bg-gradient-to-br from-purple-50 to-fuchsia-50' : 'border-red-100 bg-gradient-to-br from-red-50 to-rose-50'} shadow-sm overflow-hidden rounded-2xl relative`}>
+          <div className="absolute -right-6 -bottom-6 opacity-10 pointer-events-none scale-150">
+            <Building2 className={`w-24 h-24 ${financialStats.netProfit >= 0 ? 'text-purple-900' : 'text-red-900'}`} />
+          </div>
+          <CardContent className="p-5 sm:p-6 relative z-10">
+            <div className="flex flex-col gap-1">
+              <p className={`text-xs font-bold uppercase tracking-wider ${financialStats.netProfit >= 0 ? 'text-purple-700' : 'text-red-700'}`}>Bénéfice Net</p>
+              <p className={`text-2xl sm:text-3xl font-bold mt-1 truncate ${financialStats.netProfit >= 0 ? 'text-purple-900' : 'text-red-900'}`}>{formatCurrency(financialStats.netProfit)}</p>
             </div>
           </CardContent>
         </Card>
@@ -204,7 +242,7 @@ function NotificationFeed({ data, onNavigate, overdueInvoices }: { data: any, on
         type: 'danger',
         icon: <AlertTriangle className="w-4 h-4 text-red-600" />,
         title: 'Facture en retard',
-        description: `Facture ${inv.invoiceNumber || inv.reference} (${inv.company?.name}) est en retard de ${days} jour(s).`,
+        description: `Facture ${inv.reference} (${inv.company?.name || 'Inconnu'}) est en retard de ${days} jour(s).`,
         date: new Date(inv.dueDate),
         action: () => onNavigate('documents')
       });

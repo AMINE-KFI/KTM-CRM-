@@ -19,6 +19,7 @@ export default function ProductForm({ onClose, product }: ProductFormProps) {
   const [brand, setBrand] = useState(product?.brand || '');
   const [description, setDescription] = useState(product?.description || '');
   const [basePrice, setBasePrice] = useState(product?.price || 0);
+  const [purchasePrice, setPurchasePrice] = useState<string | number>(product?.purchasePrice || '');
   const [vatRate, setVatRate] = useState(product?.vatRate || 19);
 
   // Tenant-specific price
@@ -42,6 +43,7 @@ export default function ProductForm({ onClose, product }: ProductFormProps) {
       brand,
       description,
       price: basePrice,
+      purchasePrice: purchasePrice !== '' ? Number(purchasePrice) : undefined,
       vatRate,
       prices: newPrices
     };
@@ -79,13 +81,18 @@ export default function ProductForm({ onClose, product }: ProductFormProps) {
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <Label>Prix de base HT *</Label>
+              <Label>Prix de Vente HT *</Label>
               <Input type="number" step="0.01" required min="0" value={basePrice} onChange={e => setBasePrice(parseFloat(e.target.value))} className="mt-1" />
             </div>
             <div>
-              <Label>TVA (%) *</Label>
-              <Input type="number" required min="0" max="100" value={vatRate} onChange={e => setVatRate(parseFloat(e.target.value))} className="mt-1" />
+              <Label>Prix d'Achat HT (Optionnel)</Label>
+              <Input type="number" step="0.01" min="0" value={purchasePrice} onChange={e => setPurchasePrice(e.target.value)} className="mt-1" />
             </div>
+          </div>
+
+          <div>
+            <Label>TVA (%) *</Label>
+            <Input type="number" required min="0" max="100" value={vatRate} onChange={e => setVatRate(parseFloat(e.target.value))} className="mt-1" />
           </div>
 
           {currentTenant && (

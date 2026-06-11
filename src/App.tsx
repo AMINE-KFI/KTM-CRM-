@@ -10,12 +10,13 @@ import Tasks from './components/Tasks';
 import Team from './components/Team';
 import SettingsPage from './components/SettingsPage';
 import Documents from './components/Documents';
+import Expenses from './components/Expenses';
 import Payments from './components/Payments';
 import Login from './components/Login';
 import NotificationPopup from './components/NotificationPopup';
 import { LayoutDashboard, Building2, FileText, Settings, Menu, X, Package, Target, CheckSquare, FileSignature, Users, LogOut, Bell, Truck, CreditCard } from 'lucide-react';
 
-type Page = 'dashboard' | 'companies' | 'pipeline' | 'products' | 'tasks' | 'team' | 'settings' | 'documents' | 'suppliers' | 'payments';
+type Page = 'dashboard' | 'companies' | 'pipeline' | 'products' | 'tasks' | 'team' | 'settings' | 'documents' | 'purchases' | 'expenses' | 'suppliers' | 'payments';
 
 function AppLayout() {
   const { data, currentUser, currentTenant, setCurrentUserId, setCurrentTenant, setCurrentYearId } = useCRM();
@@ -43,11 +44,13 @@ function AppLayout() {
 
   const ALL_NAV_ITEMS: { id: Page; label: string; icon: React.ReactNode; adminOnly?: boolean }[] = [
     { id: 'dashboard', label: 'Tableau de bord', icon: <LayoutDashboard className="w-5 h-5" /> },
-    { id: 'companies', label: 'Entreprises', icon: <Building2 className="w-5 h-5" /> },
+    { id: 'companies', label: 'Clients', icon: <Building2 className="w-5 h-5" /> },
     { id: 'pipeline', label: 'Opportunités', icon: <Target className="w-5 h-5" /> },
-    { id: 'documents', label: 'Ventes & Achats', icon: <FileText className="w-5 h-5" /> },
-    { id: 'payments', label: 'Créances & Paiements', icon: <CreditCard className="w-5 h-5" /> },
+    { id: 'documents', label: 'Ventes (BC/Factures)', icon: <FileText className="w-5 h-5" /> },
+    { id: 'payments', label: 'Créances Clients', icon: <CreditCard className="w-5 h-5" /> },
     { id: 'suppliers', label: 'Fournisseurs', icon: <Truck className="w-5 h-5" /> },
+    { id: 'purchases', label: 'Achats Fournisseurs', icon: <Package className="w-5 h-5" /> },
+    { id: 'expenses', label: 'Dépenses', icon: <FileSignature className="w-5 h-5" /> },
     { id: 'products', label: 'Catalogue', icon: <Package className="w-5 h-5" /> },
     { id: 'tasks', label: 'Tâches', icon: <CheckSquare className="w-5 h-5" /> },
     { id: 'team', label: 'Mon Équipe', icon: <Users className="w-5 h-5" />, adminOnly: true },
@@ -69,7 +72,9 @@ function AppLayout() {
       case 'dashboard': return <Dashboard onNavigate={navigate} />;
       case 'companies': return <Companies role="client" />;
       case 'pipeline': return <Pipeline />;
-      case 'documents': return <Documents />;
+      case 'documents': return <Documents docGroup="sales" />;
+      case 'purchases': return <Documents docGroup="purchases" />;
+      case 'expenses': return <Expenses />;
       case 'payments': return <Payments />;
       case 'suppliers': return <Companies role="supplier" />;
       case 'products': return <Products />;

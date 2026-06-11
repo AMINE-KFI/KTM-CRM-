@@ -58,7 +58,8 @@ export interface Product {
   name: string;
   brand?: string;
   description?: string;
-  price: number; // Prix par défaut historique
+  price: number; // Prix par défaut historique (vente)
+  purchasePrice?: number; // Prix d'achat optionnel
   prices?: Record<string, number>;
   vatRate: number;
   createdAt: string;
@@ -132,7 +133,7 @@ export interface ActivityLog {
   createdAt: string;
 }
 
-export type DocumentType = 'invoice' | 'proforma' | 'delivery_note' | 'purchase_order';
+export type DocumentType = 'invoice' | 'proforma' | 'delivery_note' | 'purchase_order' | 'supplier_invoice' | 'receipt_note';
 export type DocumentStatus = 'draft' | 'validated' | 'partially_paid' | 'paid' | 'cancelled' | 'received';
 
 export interface DocumentItem {
@@ -201,6 +202,20 @@ export interface StockMovement {
   createdAt: string;
 }
 
+export interface Expense {
+  id: string;
+  title: string;
+  category: 'rent' | 'utilities' | 'salaries' | 'taxes' | 'supplies' | 'other';
+  amount: number;
+  date: string;
+  paymentMethod: string;
+  reference?: string;
+  notes?: string;
+  tenant: TenantType;
+  fiscalYear?: string;
+  createdAt: string;
+}
+
 export interface CRMData {
   companies: Company[];
   reminderSettings: ReminderSettings;
@@ -216,6 +231,7 @@ export interface CRMData {
   documents?: BusinessDocument[];
   payments?: Payment[];
   stockMovements?: StockMovement[];
+  expenses?: Expense[];
   documentCounters?: Record<string, number>;
   fiscalSettings?: Record<string, FiscalSettings>; // per tenant
   fiscalYears?: FiscalYear[];

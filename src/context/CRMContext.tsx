@@ -1,13 +1,14 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import type { CRMData, Company, Contact, ReminderSettings, Product, Deal, Task, Note, Employee, TenantType, ActivityLog, FiscalSettings } from '../types';
+import type { CRMData, Company, Contact, ReminderSettings, Product, Deal, Task, Note, Employee, TenantType, ActivityLog, FiscalSettings, Expense } from '../types';
 import { loadData, saveData, generateId } from '../lib/storage';
+import { api } from '../lib/api';
 import type { BusinessDocument, Payment, StockMovement } from '../types';
 
 interface CRMContextType {
   data: CRMData;
   currentUser: Employee | undefined;
   currentTenant: TenantType | null;
-  setCurrentUserId: (id: string | null) => void;
+  setCurrentUserId: (id: string | null, userObj?: any) => void;
   setCurrentTenant: (tenant: TenantType | null) => void;
   setCurrentYearId: (yearId: string) => void;
   startNewYear: (newYearId: string, label: string) => void;
@@ -70,16 +71,85 @@ interface CRMContextType {
   deleteDocument: (id: string) => void;
   addPayment: (payment: Omit<Payment, 'id'>) => Payment;
   getClientSituation: (companyId: string) => { totalInvoiced: number; totalPaid: number; balanceDue: number };
+  getSupplierSituation: (companyId: string) => { totalInvoiced: number; totalPaid: number; balanceDue: number };
+
+  // Expenses
+  addExpense: (expense: Omit<Expense, 'id' | 'createdAt'>) => Expense;
+  updateExpense: (id: string, updates: Partial<Expense>) => void;
+  deleteExpense: (id: string) => void;
 }
 
 const CRMContext = createContext<CRMContextType | null>(null);
 
 export function CRMProvider({ children }: { children: React.ReactNode }) {
   const [data, setData] = useState<CRMData>(() => loadData());
+  const [isInitializing, setIsInitializing] = useState(true);
 
+  // Synchronisation avec l'API au démarrage
   useEffect(() => {
-    saveData(data);
-  }, [data]);
+    const fetchData = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        if (!token) return;
+
+        const [companies, products, documents, expenses, payments] = await Promise.all([
+          api.getCompanies(),
+          api.getProducts(),
+          api.getDocuments(),
+          api.getExpenses(),
+          api.getPayments()
+        ]);
+
+        // Auto-heal document statuses based on payments (fixes legacy data)
+        let healedDocuments = [...documents];
+        let hasHealed = false;
+        
+        healedDocuments = healedDocuments.map(doc => {
+          if (doc.status !== 'paid' && doc.status !== 'cancelled') {
+            const totalPaidForDoc = payments
+              .filter((p: any) => p.documentId === doc.id)
+              .reduce((sum: number, p: any) => sum + p.amount, 0);
+            
+            let newStatus = doc.status;
+            if (totalPaidForDoc >= doc.totalAmount && doc.totalAmount > 0) {
+              newStatus = 'paid';
+            } else if (totalPaidForDoc > 0) {
+              newStatus = 'partially_paid';
+            }
+            
+            if (newStatus !== doc.status) {
+              hasHealed = true;
+              const healedDoc = { ...doc, status: newStatus };
+              // Fire-and-forget update to the DB
+              api.updateDocument(doc.id, healedDoc).catch(() => {});
+              return healedDoc;
+            }
+          }
+          return doc;
+        });
+
+        setData(prev => ({
+          ...prev,
+          companies,
+          products,
+          documents: healedDocuments,
+          expenses,
+          payments
+        }));
+      } catch (err) {
+        console.error('Erreur de synchronisation avec l\'API:', err);
+      } finally {
+        setIsInitializing(false);
+      }
+    };
+
+    fetchData();
+  }, [data.currentUser]); // Re-fetch quand l'utilisateur change
+
+  // On désactive saveData(data) pour ne plus écraser le localStorage avec toutes les données
+  // useEffect(() => {
+  //   saveData(data);
+  // }, [data]);
 
   const addCompany = useCallback((company: Omit<Company, 'id' | 'createdAt' | 'contacts'>): Company => {
     const newCompany: Company = {
@@ -88,7 +158,13 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
       createdAt: new Date().toISOString(),
       contacts: [],
     };
+    
+    // Mise à jour optimiste
     setData(prev => ({ ...prev, companies: [...prev.companies, newCompany] }));
+    
+    // Envoi à l'API
+    api.addCompany(newCompany).catch(err => console.error("API Error:", err));
+    
     return newCompany;
   }, []);
 
@@ -97,6 +173,7 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
       ...prev,
       companies: prev.companies.map(c => c.id === id ? { ...c, ...updates } : c),
     }));
+    api.updateCompany(id, updates).catch(err => console.error("API Error:", err));
   }, []);
 
   const deleteCompany = useCallback((id: string) => {
@@ -105,6 +182,7 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
       companies: prev.companies.filter(c => c.id !== id),
       documents: (prev.documents || []).filter(d => d.companyId !== id),
     }));
+    api.deleteCompany(id).catch(err => alert("Erreur Serveur: " + err.message));
   }, []);
 
   const getCompany = useCallback((id: string) => {
@@ -117,35 +195,60 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
       id: generateId(),
       createdAt: new Date().toISOString(),
     };
-    setData(prev => ({
-      ...prev,
-      companies: prev.companies.map(c =>
-        c.id === contact.companyId
-          ? { ...c, contacts: [...(c.contacts || []), newContact] }
-          : c
-      ),
-    }));
+    setData(prev => {
+      const company = prev.companies.find(c => c.id === contact.companyId);
+      if (company) {
+        const updatedContacts = [...(company.contacts || []), newContact];
+        api.updateCompany(company.id, { ...company, contacts: updatedContacts }).catch(err => alert("Erreur Serveur: " + err.message));
+      }
+      return {
+        ...prev,
+        companies: prev.companies.map(c =>
+          c.id === contact.companyId
+            ? { ...c, contacts: [...(c.contacts || []), newContact] }
+            : c
+        ),
+      };
+    });
     return newContact;
   }, []);
 
   const updateContact = useCallback((id: string, updates: Partial<Contact>) => {
-    setData(prev => ({
-      ...prev,
-      companies: prev.companies.map(c => ({
-        ...c,
-        contacts: (c.contacts || []).map(ct => ct.id === id ? { ...ct, ...updates } : ct),
-      })),
-    }));
+    setData(prev => {
+      let targetCompany: Company | null = null;
+      let updatedContacts: Contact[] = [];
+      const newCompanies = prev.companies.map(c => {
+        if ((c.contacts || []).some(ct => ct.id === id)) {
+          targetCompany = c;
+          updatedContacts = (c.contacts || []).map(ct => ct.id === id ? { ...ct, ...updates } : ct);
+          return { ...c, contacts: updatedContacts };
+        }
+        return c;
+      });
+      if (targetCompany) {
+        api.updateCompany(targetCompany.id, { ...targetCompany, contacts: updatedContacts }).catch(err => alert("Erreur Serveur: " + err.message));
+      }
+      return { ...prev, companies: newCompanies };
+    });
   }, []);
 
   const deleteContact = useCallback((id: string) => {
-    setData(prev => ({
-      ...prev,
-      companies: prev.companies.map(c => ({
-        ...c,
-        contacts: (c.contacts || []).filter(ct => ct.id !== id),
-      })),
-    }));
+    setData(prev => {
+      let targetCompany: Company | null = null;
+      let updatedContacts: Contact[] = [];
+      const newCompanies = prev.companies.map(c => {
+        if ((c.contacts || []).some(ct => ct.id === id)) {
+          targetCompany = c;
+          updatedContacts = (c.contacts || []).filter(ct => ct.id !== id);
+          return { ...c, contacts: updatedContacts };
+        }
+        return c;
+      });
+      if (targetCompany) {
+        api.updateCompany(targetCompany.id, { ...targetCompany, contacts: updatedContacts }).catch(err => alert("Erreur Serveur: " + err.message));
+      }
+      return { ...prev, companies: newCompanies };
+    });
   }, []);
 
   const getInvoicesForCompany = useCallback((companyId: string) => {
@@ -193,15 +296,18 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
   const addProduct = useCallback((product: Omit<Product, 'id' | 'createdAt'>): Product => {
     const newProduct: Product = { ...product, id: generateId(), createdAt: new Date().toISOString() };
     setData(prev => ({ ...prev, products: [...(prev.products || []), newProduct] }));
+    api.addProduct(newProduct).catch(err => alert("Erreur Serveur: " + err.message));
     return newProduct;
   }, []);
 
   const updateProduct = useCallback((id: string, updates: Partial<Product>) => {
     setData(prev => ({ ...prev, products: (prev.products || []).map(p => p.id === id ? { ...p, ...updates } : p) }));
+    api.updateProduct(id, updates).catch(err => alert("Erreur Serveur: " + err.message));
   }, []);
 
   const deleteProduct = useCallback((id: string) => {
     setData(prev => ({ ...prev, products: (prev.products || []).filter(p => p.id !== id) }));
+    api.deleteProduct(id).catch(err => alert("Erreur Serveur: " + err.message));
   }, []);
 
   const addDeal = useCallback((deal: Omit<Deal, 'id' | 'createdAt'>): Deal => {
@@ -248,8 +354,17 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
     setData(prev => ({ ...prev, notes: (prev.notes || []).filter(n => n.id !== id) }));
   }, []);
 
-  const setCurrentUserId = useCallback((id: string | null) => {
-    setData(prev => ({ ...prev, currentUserId: id }));
+  const setCurrentUserId = useCallback((id: string | null, userObj?: any) => {
+    setData(prev => {
+      const newState = { ...prev, currentUserId: id };
+      if (userObj && id) {
+        const exists = (newState.employees || []).some(e => e.id === id);
+        if (!exists) {
+          newState.employees = [...(newState.employees || []), userObj];
+        }
+      }
+      return newState;
+    });
   }, []);
 
   const setCurrentTenant = useCallback((tenant: TenantType | null) => {
@@ -277,9 +392,11 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
       const docsToDuplicate = (prev.documents || []).filter(d => 
         (d.fiscalYear || currentYearId) === currentYearId &&
         (
-          (d.type === 'invoice' && d.status !== 'paid' && d.status !== 'cancelled') ||
+          ((d.type === 'invoice' || d.type === 'supplier_invoice') && d.status !== 'paid' && d.status !== 'cancelled') ||
           (d.type === 'proforma' && d.status !== 'cancelled') ||
-          (d.type === 'delivery_note' && d.status !== 'cancelled')
+          (d.type === 'delivery_note' && d.status !== 'cancelled') ||
+          (d.type === 'receipt_note' && d.status !== 'cancelled') ||
+          (d.type === 'purchase_order' && d.status !== 'received' && d.status !== 'cancelled')
         )
       );
 
@@ -416,10 +533,18 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
 
       if (doc.status === 'validated') {
         const typePrefix = doc.type === 'invoice' ? 'FAC' : doc.type === 'proforma' ? 'PRO' : doc.type === 'delivery_note' ? 'BL' : 'BC';
-        counterKey = `${typePrefix}_${t}_${year}`;
-        const currentCounter = (prev.documentCounters || {})[counterKey] || 0;
-        nextCounter = currentCounter + 1;
-        reference = `${typePrefix}-${t}-${year}-${nextCounter.toString().padStart(4, '0')}`;
+        const prefix = `${typePrefix}-${t}-${year}-`;
+        
+        // Find the maximum counter for this prefix from existing documents
+        const existingDocs = (prev.documents || []).filter(d => d.reference && d.reference.startsWith(prefix));
+        const maxCounter = existingDocs.reduce((max, d) => {
+          const parts = d.reference!.split('-');
+          const num = parseInt(parts[parts.length - 1], 10);
+          return !isNaN(num) && num > max ? num : max;
+        }, 0);
+        
+        nextCounter = maxCounter + 1;
+        reference = `${prefix}${nextCounter.toString().padStart(4, '0')}`;
       }
       
       newDoc = { 
@@ -468,6 +593,9 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
         products: updatedProducts
       };
     });
+    if (newDoc) {
+      api.addDocument(newDoc).catch(err => alert("Erreur Serveur: " + err.message));
+    }
     return newDoc || ({} as BusinessDocument);
   }, []);
 
@@ -560,6 +688,7 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
         products: updatedProducts
       };
     });
+    api.updateDocument(id, updates).catch(err => alert("Erreur Serveur: " + err.message));
   }, []);
 
   const deleteDocument = useCallback((id: string) => {
@@ -572,6 +701,7 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
       }
       return { ...prev, documents: docs.filter(d => d.id !== id) };
     });
+    api.deleteDocument(id).catch(err => alert("Erreur Serveur: " + err.message));
   }, []);
 
   const addPayment = useCallback((payment: Omit<Payment, 'id'>): Payment => {
@@ -597,7 +727,9 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
           }
           
           if (newStatus !== doc.status) {
-            newDocs = newDocs.map(d => d.id === doc.id ? { ...d, status: newStatus } : d);
+            const updatedDoc = { ...doc, status: newStatus };
+            newDocs = newDocs.map(d => d.id === doc.id ? updatedDoc : d);
+            api.updateDocument(doc.id, updatedDoc).catch(err => console.error("Failed to update doc status:", err));
           }
         }
       }
@@ -608,6 +740,9 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
         documents: newDocs
       };
     });
+    if (newPayment) {
+      api.addPayment(newPayment).catch(err => alert("Erreur Serveur: " + err.message));
+    }
     return newPayment || ({} as Payment);
   }, []);
 
@@ -622,8 +757,9 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
       (!data.currentTenant || d.tenant === data.currentTenant)
     );
     
+    const invoiceIds = invoices.map(i => i.id);
     const clientPayments = pays.filter(p => 
-      p.companyId === companyId &&
+      (invoiceIds.includes(p.documentId) || p.companyId === companyId) &&
       (!data.currentTenant || p.tenant === data.currentTenant)
     );
 
@@ -633,6 +769,62 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
 
     return { totalInvoiced, totalPaid, balanceDue };
   }, [data.documents, data.payments, data.currentTenant]);
+
+  const getSupplierSituation = useCallback((companyId: string) => {
+    const docs = data.documents || [];
+    const pays = data.payments || [];
+    
+    const invoices = docs.filter(d => 
+      d.companyId === companyId && 
+      d.type === 'supplier_invoice' && 
+      (d.status === 'validated' || d.status === 'partially_paid' || d.status === 'paid') &&
+      (!data.currentTenant || d.tenant === data.currentTenant)
+    );
+    
+    const invoiceIds = invoices.map(i => i.id);
+    const supplierPayments = pays.filter(p => 
+      (invoiceIds.includes(p.documentId) || p.companyId === companyId) &&
+      (!data.currentTenant || p.tenant === data.currentTenant)
+    );
+
+    const totalInvoiced = invoices.reduce((sum, inv) => sum + inv.totalAmount, 0);
+    const totalPaid = supplierPayments.reduce((sum, p) => sum + p.amount, 0);
+    const balanceDue = totalInvoiced - totalPaid;
+
+    return { totalInvoiced, totalPaid, balanceDue };
+  }, [data.documents, data.payments, data.currentTenant]);
+
+  const addExpense = useCallback((expense: Omit<Expense, 'id' | 'createdAt'>): Expense => {
+    let newExpense: Expense | null = null;
+    setData(prev => {
+      newExpense = {
+        ...expense,
+        id: generateId(),
+        createdAt: new Date().toISOString()
+      };
+      return { ...prev, expenses: [...(prev.expenses || []), newExpense] };
+    });
+    if (newExpense) {
+      api.addExpense(newExpense).catch(err => alert("Erreur Serveur: " + err.message));
+    }
+    return newExpense!;
+  }, []);
+
+  const updateExpense = useCallback((id: string, updates: Partial<Expense>) => {
+    setData(prev => ({
+      ...prev,
+      expenses: (prev.expenses || []).map(e => e.id === id ? { ...e, ...updates } : e)
+    }));
+    api.updateExpense(id, updates).catch(err => alert("Erreur Serveur: " + err.message));
+  }, []);
+
+  const deleteExpense = useCallback((id: string) => {
+    setData(prev => ({
+      ...prev,
+      expenses: (prev.expenses || []).filter(e => e.id !== id)
+    }));
+    api.deleteExpense(id).catch(err => alert("Erreur Serveur: " + err.message));
+  }, []);
 
   const updateFiscalSettings = useCallback((tenant: string, settings: FiscalSettings) => {
     setData(prev => ({
@@ -688,6 +880,7 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
     activityLogs: filterByTenantAndYear(data.activityLogs || []),
     documents: filterByTenantAndYear(data.documents || []),
     payments: filterByTenantAndYear(data.payments || []),
+    expenses: filterByTenantAndYear(data.expenses || []),
     stockMovements: (data.stockMovements || []).filter(s => !data.currentTenant || s.tenant === data.currentTenant), // stock is global across years
     products: data.products || [],
     notes: data.notes || [],
@@ -707,10 +900,10 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
       addProduct, updateProduct, deleteProduct,
       addDeal, updateDeal, deleteDeal,
       addTask, updateTask, deleteTask,
-      addNote, deleteNote, addActivityLog,
-      setNotificationRead,
-      addDocument, updateDocument, deleteDocument, addPayment, getClientSituation,
-      addStockMovement, updateFiscalSettings
+      addNote, deleteNote,
+      addDocument, updateDocument, deleteDocument, addPayment, getClientSituation, getSupplierSituation,
+      addStockMovement,
+      addExpense, updateExpense, deleteExpense
     }}>
       {children}
     </CRMContext.Provider>

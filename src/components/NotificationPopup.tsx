@@ -58,7 +58,7 @@ export default function NotificationPopup({ onClose }: NotificationPopupProps) {
       items.push({
         id: `invoice_overdue_${inv.id}`,
         type: 'important',
-        title: `Facture en retard: ${inv.invoiceNumber}`,
+        title: `Facture en retard: ${inv.reference}`,
         description: `La facture de ${formatCurrency(inv.totalAmount)} pour ${inv.company?.name || 'Inconnu'} est en retard depuis le ${formatDate(inv.dueDate)}.`,
         icon: <FileText className="w-5 h-5 text-red-500" />,
         date: new Date(inv.dueDate).getTime()

@@ -133,6 +133,7 @@ const PRODUCT_COLUMNS = [
   'Nom',
   'Description',
   'Prix HT',
+  "Prix d'Achat HT",
   'TVA (%)'
 ];
 
@@ -141,6 +142,7 @@ export function downloadProductTemplate() {
     'Nom': 'Produit A',
     'Description': 'Description du produit A',
     'Prix HT': 15000,
+    "Prix d'Achat HT": 10000,
     'TVA (%)': 19
   }], { header: PRODUCT_COLUMNS });
 
@@ -154,6 +156,7 @@ export function exportProductsToExcel(products: Product[]) {
     'Nom': p.name,
     'Description': p.description || '',
     'Prix par défaut HT': p.price,
+    "Prix d'Achat HT": p.purchasePrice || '',
     'Prix Katamine HT': p.prices?.katamine || p.price,
     'Prix KL Tools HT': p.prices?.kltools || p.price,
     'TVA (%)': p.vatRate,
@@ -171,6 +174,7 @@ export function getProductsExcelBlob(products: Product[]): Blob {
     'Nom': p.name,
     'Description': p.description || '',
     'Prix par défaut HT': p.price,
+    "Prix d'Achat HT": p.purchasePrice || '',
     'Prix Katamine HT': p.prices?.katamine || p.price,
     'Prix KL Tools HT': p.prices?.kltools || p.price,
     'TVA (%)': p.vatRate,
@@ -246,6 +250,7 @@ export function parseProductsExcel(file: File): Promise<Partial<Product>[]> {
           name: row['Nom']?.toString() || 'Sans Nom',
           description: row['Description']?.toString() || '',
           price: parseFloat(row['Prix HT'] || row['Prix par défaut HT'] || '0'),
+          purchasePrice: row["Prix d'Achat HT"] ? parseFloat(row["Prix d'Achat HT"]) : undefined,
           vatRate: parseFloat(row['TVA (%)'] || '19')
         }));
         resolve(products);

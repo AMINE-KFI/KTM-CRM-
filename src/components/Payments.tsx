@@ -45,47 +45,38 @@ export default function Payments() {
 
   // Logic
   const allSituations = useMemo(() => {
-    let filtered = data.companies.map(company => {
-      let companyInvoices = (data.documents || []).filter(i => i.companyId === company.id && i.type === 'invoice' && i.status !== 'draft' && i.status !== 'cancelled');
-      
-      if (dateRange.from) {
-        companyInvoices = companyInvoices.filter(i => new Date(i.date) >= dateRange.from!);
-      }
-      if (dateRange.to) {
-        companyInvoices = companyInvoices.filter(i => new Date(i.date) <= dateRange.to!);
-      }
-      
-      const totalInvoiced = companyInvoices.reduce((sum, inv) => sum + inv.totalAmount, 0);
-      
-      // Calculate total paid by summing up payments associated with this company's invoices
-      const invoiceIds = companyInvoices.map(i => i.id);
-      const companyPayments = (data.payments || []).filter(p => invoiceIds.includes(p.documentId) || (!p.documentId && p.companyId === company.id));
-      
-      let totalPaid = companyPayments.reduce((sum, p) => sum + p.amount, 0);
-      
-      // Also some documents might have a subtotal or a paid amount? No, the modal uses data.payments to calculate paid.
-      // But wait! If we filter invoices by date, should we filter their payments too? 
-      // Usually, yes or no. If we just want the status of those invoices, the payments might have happened later.
-      // So we count all payments linked to these invoices.
-      
-      let balanceDue = totalInvoiced - totalPaid;
-      // Handle overpayments or general payments if any
-      if (balanceDue < 0) balanceDue = 0;
-      
-      let status = 'soldé';
-      if (balanceDue > 0) {
-        status = totalPaid > 0 ? 'partiel' : 'impayé';
-      }
+    let filtered = (data.documents || [])
+      .filter(i => i.type === 'invoice' && i.status !== 'draft' && i.status !== 'cancelled')
+      .map(invoice => {
+        const company = data.companies.find(c => c.id === invoice.companyId);
+        
+        if (dateRange.from && new Date(invoice.date) < dateRange.from) return null;
+        if (dateRange.to && new Date(invoice.date) > dateRange.to) return null;
+        
+        const totalInvoiced = invoice.totalAmount || 0;
+        
+        // Calculate total paid by summing up payments associated with this invoice
+        const invoicePayments = (data.payments || []).filter(p => p.documentId === invoice.id);
+        let totalPaid = invoicePayments.reduce((sum, p) => sum + p.amount, 0);
+        
+        let balanceDue = totalInvoiced - totalPaid;
+        // Handle overpayments if any
+        if (balanceDue < 0) balanceDue = 0;
+        
+        let status = 'soldé';
+        if (balanceDue > 0) {
+          status = totalPaid > 0 ? 'partiel' : 'impayé';
+        }
 
-      return {
-        company,
-        totalInvoiced,
-        totalPaid,
-        balanceDue,
-        status,
-        invoicesCount: companyInvoices.length
-      };
-    });
+        return {
+          invoice,
+          company,
+          totalInvoiced,
+          totalPaid,
+          balanceDue,
+          status
+        };
+      }).filter(Boolean) as any[];
 
     // Filtre de base
     if (!dateRange.from && !dateRange.to) {
@@ -96,7 +87,7 @@ export default function Payments() {
 
     // Filtre Client
     if (selectedClients.length > 0) {
-      filtered = filtered.filter(s => selectedClients.includes(s.company.id));
+      filtered = filtered.filter(s => s.company && selectedClients.includes(s.company.id));
     }
 
     // Filtre Statut
@@ -112,7 +103,7 @@ export default function Payments() {
     });
 
     return filtered;
-  }, [data.companies, data.invoices, dateRange, selectedClients, selectedStatuses, sortConfig]);
+  }, [data.companies, data.documents, data.payments, dateRange, selectedClients, selectedStatuses, sortConfig]);
 
   // KPIs
   const globalInvoiced = allSituations.reduce((sum, s) => sum + s.totalInvoiced, 0);
@@ -361,8 +352,13 @@ export default function Payments() {
             <thead className="text-xs text-gray-500 bg-gray-50/80 border-b border-gray-100">
               <tr>
                 <th className="px-6 py-4 font-semibold uppercase tracking-wider">
+                  <div className="flex items-center gap-2 cursor-pointer hover:text-gray-900 transition-colors" onClick={() => toggleSort('invoice.reference')}>
+                    Référence <ArrowUpDown className="w-3.5 h-3.5 opacity-50" />
+                  </div>
+                </th>
+                <th className="px-6 py-4 font-semibold uppercase tracking-wider">
                   <div className="flex items-center gap-2 cursor-pointer hover:text-gray-900 transition-colors" onClick={() => toggleSort('company')}>
-                    Entreprise / Client <ArrowUpDown className="w-3.5 h-3.5 opacity-50" />
+                    Client <ArrowUpDown className="w-3.5 h-3.5 opacity-50" />
                   </div>
                 </th>
                 <th className="px-6 py-4 font-semibold uppercase tracking-wider text-right">
@@ -392,7 +388,11 @@ export default function Payments() {
               {paginatedSituations.map((sit) => {
                 const statusDef = STATUSES.find(s => s.id === sit.status);
                 return (
-                  <tr key={sit.company.id} className="bg-white hover:bg-gray-50/80 transition-colors group">
+                  <tr key={sit.invoice.id} className="bg-white hover:bg-gray-50/80 transition-colors group">
+                    <td className="px-6 py-4">
+                      <div className="font-semibold text-gray-900">{sit.invoice.reference || 'N/A'}</div>
+                      <div className="text-xs text-gray-500 mt-0.5">{new Date(sit.invoice.date).toLocaleDateString('fr-FR')}</div>
+                    </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
                         <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-100 to-blue-50 flex items-center justify-center font-bold text-blue-700 shadow-sm border border-blue-100/50">
@@ -420,17 +420,17 @@ export default function Payments() {
                         <DropdownMenuContent align="end" className="w-48">
                           <DropdownMenuLabel>Actions</DropdownMenuLabel>
                           <DropdownMenuSeparator />
-                          <DropdownMenuItem onClick={() => window.location.hash = `#company/${sit.company.id}`} className="cursor-pointer">
-                            <Search className="mr-2 h-4 w-4 text-gray-400" /> Voir les détails
+                          <DropdownMenuItem onClick={() => window.location.hash = `#document/${sit.invoice.id}`} className="cursor-pointer">
+                            <Search className="mr-2 h-4 w-4 text-gray-400" /> Voir la facture
                           </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => setPaymentCompanyId(sit.company.id)} className="cursor-pointer font-medium text-blue-600 focus:text-blue-700">
                             <CreditCard className="mr-2 h-4 w-4 text-blue-500" /> Ajouter un paiement
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem 
-                            onClick={() => window.location.href = `mailto:${sit.company.email || ''}?subject=Relance de facture impayée - Katamine`}
+                            onClick={() => window.location.href = `mailto:${sit.company?.email || ''}?subject=Relance de facture impayée - Katamine`}
                             className="cursor-pointer text-amber-600 focus:text-amber-700"
-                            disabled={sit.balanceDue <= 0 || !sit.company.email}
+                            disabled={sit.balanceDue <= 0 || !sit.company?.email}
                           >
                             <Download className="mr-2 h-4 w-4 text-amber-500" /> Envoyer une relance
                           </DropdownMenuItem>
@@ -442,7 +442,7 @@ export default function Payments() {
               })}
               {paginatedSituations.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-6 py-16 text-center">
+                  <td colSpan={7} className="px-6 py-16 text-center">
                     <div className="flex flex-col items-center justify-center text-gray-400">
                       <Search className="w-10 h-10 mb-3 opacity-20" />
                       <p className="text-base font-medium text-gray-500">Aucune donnée trouvée</p>

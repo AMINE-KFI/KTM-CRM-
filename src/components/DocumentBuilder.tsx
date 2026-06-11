@@ -26,6 +26,7 @@ export default function DocumentBuilder({ onClose, defaultType = 'invoice', defa
   const isReadOnly = initialData && initialData.status !== 'draft';
 
   const [type, setType] = useState<DocumentType>(initialData?.type || defaultType);
+  const isPurchase = type === 'purchase_order' || type === 'supplier_invoice' || type === 'receipt_note';
   const [companyId, setCompanyId] = useState(initialData?.companyId || sourceData?.companyId || defaultCompanyId);
   const [vatRate, setVatRate] = useState<number>(initialData?.vatRate ?? sourceData?.vatRate ?? 0.19);
   const [issueDate, setIssueDate] = useState(() => initialData?.createdAt ? initialData.createdAt.split('T')[0] : new Date().toISOString().split('T')[0]);
@@ -83,7 +84,7 @@ export default function DocumentBuilder({ onClose, defaultType = 'invoice', defa
           const price = currentTenant && product.prices && product.prices[currentTenant] 
             ? product.prices[currentTenant] 
             : product.price;
-          updated.unitPrice = price;
+          updated.unitPrice = isPurchase && product.purchasePrice !== undefined ? product.purchasePrice : price;
         }
       }
 
@@ -96,7 +97,7 @@ export default function DocumentBuilder({ onClose, defaultType = 'invoice', defa
 
   const handleSave = (targetStatus: 'draft' | 'validated') => {
     if (!companyId || items.length === 0) {
-      alert(`Veuillez sélectionner un ${type === 'purchase_order' ? 'fournisseur' : 'client'} et ajouter au moins un article.`);
+      alert(`Veuillez sélectionner un ${isPurchase ? 'fournisseur' : 'client'} et ajouter au moins un article.`);
       return;
     }
 
@@ -115,6 +116,7 @@ export default function DocumentBuilder({ onClose, defaultType = 'invoice', defa
       vatAmount: taxAmount,
       totalAmount,
       status: targetStatus,
+      date: issueDate,
       createdAt: issueDate,
       dueDate,
       poReference,
@@ -155,6 +157,10 @@ export default function DocumentBuilder({ onClose, defaultType = 'invoice', defa
         return [{ type: 'delivery_note' as DocumentType, label: 'Bon de Livraison' }];
       case 'delivery_note':
         return [{ type: 'invoice' as DocumentType, label: 'Facture' }];
+      case 'purchase_order':
+        return [{ type: 'supplier_invoice' as DocumentType, label: 'Facture Fournisseur' }, { type: 'receipt_note' as DocumentType, label: 'Bon de Réception' }];
+      case 'receipt_note':
+        return [{ type: 'supplier_invoice' as DocumentType, label: 'Facture Fournisseur' }];
       default:
         return [];
     }
@@ -241,6 +247,8 @@ export default function DocumentBuilder({ onClose, defaultType = 'invoice', defa
                   <SelectItem value="proforma">Facture Proforma</SelectItem>
                   <SelectItem value="delivery_note">Bon de livraison</SelectItem>
                   <SelectItem value="purchase_order">Bon de commande</SelectItem>
+                  <SelectItem value="supplier_invoice">Facture Fournisseur</SelectItem>
+                  <SelectItem value="receipt_note">Bon de Réception</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -262,13 +270,13 @@ export default function DocumentBuilder({ onClose, defaultType = 'invoice', defa
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <Label>{type === 'purchase_order' ? 'Fournisseur' : 'Client'} *</Label>
+              <Label>{isPurchase ? 'Fournisseur' : 'Client'} *</Label>
               <Select value={companyId} onValueChange={setCompanyId} required disabled={isReadOnly}>
                 <SelectTrigger className="mt-1">
-                  <SelectValue placeholder={`Sélectionner un ${type === 'purchase_order' ? 'fournisseur' : 'client'}...`} />
+                  <SelectValue placeholder={`Sélectionner un ${isPurchase ? 'fournisseur' : 'client'}...`} />
                 </SelectTrigger>
                 <SelectContent>
-                  {type === 'purchase_order' 
+                  {isPurchase 
                     ? data.companies.filter(c => c.role === 'supplier' || c.role === 'both').map(s => (
                         <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
                       ))

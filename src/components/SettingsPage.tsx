@@ -13,6 +13,7 @@ import { useEffect } from 'react';
 import JSZip from 'jszip';
 import { generateDocumentPDF } from '@/lib/pdf';
 import { getCompaniesExcelBlob, getProductsExcelBlob, getCreancesExcelBlob, getPaymentsExcelBlob } from '@/lib/excel';
+import { api } from '@/lib/api';
 
 export default function SettingsPage() {
   const { data, updateReminderSettings, updateInvoice, getOverdueInvoices, currentTenant, updateFiscalSettings, startNewYear } = useCRM();
@@ -127,10 +128,12 @@ export default function SettingsPage() {
       
       const zip = new JSZip();
 
-      const facturesFolder = zip.folder("factures");
-      const blFolder = zip.folder("bl");
-      const bcFolder = zip.folder("bc");
+      const facturesFolder = zip.folder("factures_clients");
+      const blFolder = zip.folder("bl_clients");
+      const bcFolder = zip.folder("bc_fournisseurs");
       const proformaFolder = zip.folder("proforma");
+      const facturesFournisseursFolder = zip.folder("factures_fournisseurs");
+      const brFournisseursFolder = zip.folder("bons_reception_fournisseurs");
 
       for (const doc of yearDocs) {
         const company = data.companies.find(c => c.id === doc.companyId);
@@ -146,6 +149,8 @@ export default function SettingsPage() {
         else if (doc.type === 'delivery_note' && blFolder) blFolder.file(fileName, pdfBlob);
         else if (doc.type === 'purchase_order' && bcFolder) bcFolder.file(fileName, pdfBlob);
         else if (doc.type === 'proforma' && proformaFolder) proformaFolder.file(fileName, pdfBlob);
+        else if (doc.type === 'supplier_invoice' && facturesFournisseursFolder) facturesFournisseursFolder.file(fileName, pdfBlob);
+        else if (doc.type === 'receipt_note' && brFournisseursFolder) brFournisseursFolder.file(fileName, pdfBlob);
       }
 
       const companiesBlob = getCompaniesExcelBlob(data.companies);
@@ -475,15 +480,21 @@ export default function SettingsPage() {
             </div>
             <Button 
               variant="destructive" 
-              onClick={() => {
+              onClick={async () => {
                 if (confirm("ATTENTION : Vous êtes sur le point d'effacer TOUTES vos données. Cette action est irréversible. Êtes-vous vraiment sûr ?")) {
                   const val = prompt("Tapez 'SUPPRIMER' pour confirmer :");
                   if (val === 'SUPPRIMER') {
-                    localStorage.removeItem('katamine_crm_core_db');
-                    localStorage.removeItem('katamine_crm_data_v3');
-                    localStorage.removeItem('katamine_crm_data_v2');
-                    localStorage.removeItem('katamine_crm_data');
-                    window.location.reload();
+                    try {
+                      await api.resetDatabase();
+                      localStorage.removeItem('katamine_crm_core_db');
+                      localStorage.removeItem('katamine_crm_data_v3');
+                      localStorage.removeItem('katamine_crm_data_v2');
+                      localStorage.removeItem('katamine_crm_data');
+                      alert("Toutes les données ont été effacées avec succès.");
+                      window.location.reload();
+                    } catch (err: any) {
+                      alert("Erreur lors de l'effacement : " + err.message);
+                    }
                   }
                 }
               }}

@@ -10,8 +10,9 @@ import DocumentBuilder from './DocumentBuilder';
 import PaymentModal from './PaymentModal';
 import type { BusinessDocument, DocumentType } from '@/types';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
-export default function Documents() {
+export default function Documents({ docGroup = 'sales' }: { docGroup?: 'sales' | 'purchases' }) {
   const { data, getCompany, updateDocument, deleteDocument } = useCRM();
   const [showDocBuilder, setShowDocBuilder] = useState(false);
   const [editDocument, setEditDocument] = useState<BusinessDocument | null>(null);
@@ -21,11 +22,15 @@ export default function Documents() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState<string>('all');
 
-  const documents = data.documents || [];
+  const documents = (data.documents || []).filter(d => !data.currentTenant || d.tenant === data.currentTenant);
 
   const filteredDocuments = useMemo(() => {
     return documents.filter(doc => {
-      const entity = doc.type === 'purchase_order' 
+      const isPurchase = doc.type === 'purchase_order' || doc.type === 'supplier_invoice' || doc.type === 'receipt_note';
+      if (docGroup === 'sales' && isPurchase) return false;
+      if (docGroup === 'purchases' && !isPurchase) return false;
+
+      const entity = isPurchase
         ? data.companies.find(c => c.id === doc.companyId && (c.role === 'supplier' || c.role === 'both'))
         : getCompany(doc.companyId);
         
@@ -40,20 +45,26 @@ export default function Documents() {
   }, [documents, searchTerm, filterType, getCompany, data.companies]);
 
   const kpis = useMemo(() => {
-    const invoices = documents.filter(d => d.type === 'invoice' && d.status !== 'cancelled');
-    const proformas = documents.filter(d => d.type === 'proforma' && (d.status === 'draft' || d.status === 'validated'));
+    const isSales = docGroup === 'sales';
+    const mainType = isSales ? 'invoice' : 'supplier_invoice';
+    const pendingType = isSales ? 'proforma' : 'purchase_order';
+
+    const mainDocs = documents.filter(d => d.type === mainType && d.status !== 'cancelled');
+    const pendingDocs = documents.filter(d => d.type === pendingType && (d.status === 'draft' || d.status === 'validated'));
     
-    const totalInvoiced = invoices.reduce((sum, d) => sum + d.totalAmount, 0);
-    const pendingQuotesCount = proformas.length;
+    const totalInvoiced = mainDocs.reduce((sum, d) => sum + d.totalAmount, 0);
+    const pendingQuotesCount = pendingDocs.length;
     
     return { totalInvoiced, pendingQuotesCount };
-  }, [documents]);
+  }, [documents, docGroup]);
 
   const docTypeLabels: Record<string, string> = {
     invoice: 'Facture',
     proforma: 'Proforma',
     delivery_note: 'BL',
-    purchase_order: 'BC'
+    purchase_order: 'BC Fournisseur',
+    supplier_invoice: 'Facture Fournisseur',
+    receipt_note: 'Bon de Réception'
   };
 
   const getStatusColor = (status: string) => {
@@ -81,8 +92,8 @@ export default function Documents() {
   };
 
   const handlePrint = (doc: BusinessDocument) => {
-    // For purchase orders, we'll pass the supplier as the company for the PDF generator
-    const entity = doc.type === 'purchase_order' 
+    const isPurchase = doc.type === 'purchase_order' || doc.type === 'supplier_invoice' || doc.type === 'receipt_note';
+    const entity = isPurchase
       ? data.companies.find(c => c.id === doc.companyId && (c.role === 'supplier' || c.role === 'both'))
       : getCompany(doc.companyId);
 
@@ -126,21 +137,10 @@ export default function Documents() {
   if (showDocBuilder || editDocument || convertingDoc) {
     return (
       <DocumentBuilder 
-        onClose={() => { 
-          setShowDocBuilder(false); 
-          setEditDocument(null); 
-          setConvertingDoc(null);
-          setConvertingTargetType(null);
-        }}
+        onClose={() => { setShowDocBuilder(false); setConvertingDoc(null); setConvertingTargetType(null); setEditDocument(null); }} 
         initialData={editDocument || undefined}
         sourceData={convertingDoc || undefined}
-        defaultType={convertingTargetType || undefined}
-        onConvert={(doc, targetType) => {
-          setEditDocument(null);
-          setConvertingDoc(doc);
-          setConvertingTargetType(targetType);
-          setShowDocBuilder(true);
-        }}
+        defaultType={convertingTargetType || (docGroup === 'purchases' ? 'supplier_invoice' : 'invoice')}
       />
     );
   }
@@ -149,15 +149,20 @@ export default function Documents() {
     <div className="space-y-5">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">ERP : Documents</h1>
+          <h1 className="text-2xl font-bold text-gray-900">{docGroup === 'sales' ? 'Documents de Vente' : 'Achats et Commandes'}</h1>
           <p className="text-gray-500 text-sm mt-0.5">{filteredDocuments.length} document(s)</p>
         </div>
         <div className="flex gap-2">
-          <Button onClick={() => setShowPaymentModal(true)} variant="outline" className="gap-2 text-green-600 border-green-200 hover:bg-green-50">
-            <CreditCard className="w-4 h-4" /> Encaisser
-          </Button>
-          <Button onClick={() => { setEditDocument(null); setShowDocBuilder(true); }} className="bg-blue-600 hover:bg-blue-700 text-white gap-2">
-            <Plus className="w-4 h-4" /> Créer un document
+          {docGroup === 'sales' && (
+            <Button onClick={() => setShowPaymentModal(true)} variant="outline" className="gap-2 text-green-600 border-green-200 hover:bg-green-50">
+              <CreditCard className="w-4 h-4" /> Encaisser
+            </Button>
+          )}
+          <Button onClick={() => { 
+            setEditDocument(null); 
+            setShowDocBuilder(true); 
+          }} className="bg-blue-600 hover:bg-blue-700 text-white gap-2">
+            <Plus className="w-4 h-4" /> {docGroup === 'sales' ? 'Créer un document' : 'Nouvel Achat'}
           </Button>
         </div>
       </div>
@@ -169,7 +174,7 @@ export default function Documents() {
           </div>
           <CardContent className="p-5 sm:p-6 relative z-10">
             <div className="flex flex-col gap-1">
-              <p className="text-xs font-bold text-blue-700 uppercase tracking-wider">Total Facturé</p>
+              <p className="text-xs font-bold text-blue-700 uppercase tracking-wider">{docGroup === 'sales' ? 'Total Ventes' : 'Total Achats'}</p>
               <p className="text-2xl sm:text-4xl font-bold text-blue-900 mt-1 truncate">{formatCurrency(kpis.totalInvoiced)}</p>
             </div>
           </CardContent>
@@ -181,7 +186,7 @@ export default function Documents() {
           </div>
           <CardContent className="p-5 sm:p-6 relative z-10">
             <div className="flex flex-col gap-1">
-              <p className="text-xs font-bold text-indigo-700 uppercase tracking-wider">Devis en attente</p>
+              <p className="text-xs font-bold text-indigo-700 uppercase tracking-wider">{docGroup === 'sales' ? 'Devis en attente' : 'BC en attente'}</p>
               <p className="text-2xl sm:text-4xl font-bold text-indigo-900 mt-1 truncate">{kpis.pendingQuotesCount}</p>
             </div>
           </CardContent>
@@ -203,19 +208,27 @@ export default function Documents() {
               className="pl-9 h-9 w-[250px] bg-white border-gray-200"
             />
           </div>
-          <div className="flex gap-2 overflow-x-auto w-full md:w-auto">
-            {['all', 'invoice', 'proforma', 'delivery_note', 'purchase_order'].map(type => (
-              <Button
-                key={type}
-                variant={filterType === type ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setFilterType(type)}
-                className={filterType === type ? 'bg-gray-900 text-white h-9' : 'text-gray-600 h-9 bg-white'}
-              >
-                {type === 'all' ? 'Tous' : docTypeLabels[type]}
-              </Button>
-            ))}
-          </div>
+          <Select value={filterType} onValueChange={setFilterType}>
+            <SelectTrigger className="w-[180px] bg-white">
+              <SelectValue placeholder="Type" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Tous les types</SelectItem>
+              {docGroup === 'sales' ? (
+                <>
+                  <SelectItem value="invoice">Facture</SelectItem>
+                  <SelectItem value="proforma">Proforma</SelectItem>
+                  <SelectItem value="delivery_note">Bon de Livraison</SelectItem>
+                </>
+              ) : (
+                <>
+                  <SelectItem value="supplier_invoice">Facture Fournisseur</SelectItem>
+                  <SelectItem value="purchase_order">BC Fournisseur</SelectItem>
+                  <SelectItem value="receipt_note">Bon de Réception</SelectItem>
+                </>
+              )}
+            </SelectContent>
+          </Select>
         </div>
 
         <div className="overflow-x-auto">
@@ -223,7 +236,6 @@ export default function Documents() {
             <div className="text-center py-16">
               <FileText className="w-12 h-12 text-gray-200 mx-auto mb-3" />
               <p className="text-gray-400 font-medium">Aucun document trouvé</p>
-              <p className="text-sm text-gray-300 mt-1">Créez votre première facture ou devis.</p>
             </div>
           ) : (
             <table className="w-full text-sm text-left">
@@ -239,7 +251,7 @@ export default function Documents() {
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {filteredDocuments.map(doc => {
-                  const entity = doc.type === 'purchase_order' 
+                  const entity = doc.type === 'purchase_order' || doc.type === 'supplier_invoice' || doc.type === 'receipt_note'
                     ? data.companies.find(c => c.id === doc.companyId && (c.role === 'supplier' || c.role === 'both'))
                     : getCompany(doc.companyId);
                     
