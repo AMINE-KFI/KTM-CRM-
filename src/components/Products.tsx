@@ -1,16 +1,16 @@
-import { useState } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import { useCRM } from '@/context/CRMContext';
 import { formatCurrency, formatDate } from '@/lib/storage';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Package, Plus, Search, MoreVertical, Edit2, Upload, Download, FileSpreadsheet, ChevronRight, FileText } from 'lucide-react';
+import { Package, Plus, Search, MoreVertical, Edit2, Upload, Download, FileSpreadsheet, ChevronRight, FileText, Filter, TrendingUp, Layers } from 'lucide-react';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator
 } from '@/components/ui/dropdown-menu';
 import { exportProductsToExcel, parseProductsExcel, downloadProductTemplate } from '@/lib/excel';
 import { exportProductsToPDF } from '@/lib/pdf';
-import { useRef } from 'react';
+
 import ProductForm from './ProductForm';
 import type { Product } from '@/types';
 
@@ -45,6 +45,22 @@ export default function Products() {
     p.name.toLowerCase().includes(search.toLowerCase()) || 
     (p.description && p.description.toLowerCase().includes(search.toLowerCase()))
   ).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+  const kpis = useMemo(() => {
+    const products = data.products || [];
+    const totalProducts = products.length;
+    let stockValue = 0;
+    
+    if (currentTenant) {
+       products.forEach(p => {
+         const price = p.prices && p.prices[currentTenant] !== undefined ? p.prices[currentTenant] : p.price;
+         const stock = p.stock && p.stock[currentTenant] !== undefined ? p.stock[currentTenant] : 0;
+         stockValue += price * stock;
+       });
+    }
+
+    return { totalProducts, stockValue };
+  }, [data.products, currentTenant]);
 
   const handleAdd = () => {
     setEditingProduct(undefined);
@@ -111,93 +127,142 @@ export default function Products() {
         </div>
       </div>
 
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-        <Input
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          placeholder="Rechercher un produit..."
-          className="pl-9 bg-white border-gray-200"
-        />
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <Card className="border border-blue-100 shadow-sm bg-gradient-to-br from-blue-50 to-indigo-50 overflow-hidden rounded-2xl relative">
+          <div className="absolute -right-6 -bottom-6 opacity-10 pointer-events-none scale-150">
+            <Package className="w-24 h-24 text-blue-900" />
+          </div>
+          <CardContent className="p-5 sm:p-6 relative z-10">
+            <div className="flex flex-col gap-1">
+              <p className="text-xs font-bold text-blue-700 uppercase tracking-wider">Total Produits</p>
+              <p className="text-2xl sm:text-4xl font-bold text-blue-900 mt-1 truncate">{kpis.totalProducts}</p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border border-emerald-100 shadow-sm bg-gradient-to-br from-emerald-50 to-green-50 overflow-hidden rounded-2xl relative">
+          <div className="absolute -right-6 -bottom-6 opacity-10 pointer-events-none scale-150">
+            <Layers className="w-24 h-24 text-emerald-900" />
+          </div>
+          <CardContent className="p-5 sm:p-6 relative z-10">
+            <div className="flex flex-col gap-1">
+              <p className="text-xs font-bold text-emerald-700 uppercase tracking-wider">Valeur du Stock (HT)</p>
+              <p className="text-2xl sm:text-4xl font-bold text-emerald-900 mt-1 truncate">{formatCurrency(kpis.stockValue)}</p>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
-      {filtered.length === 0 ? (
-        <div className="text-center py-16">
-          <Package className="w-12 h-12 text-gray-200 mx-auto mb-3" />
-          <p className="text-gray-400 font-medium">Aucun produit trouvé</p>
+      <Card className="border border-gray-200/60 shadow-sm overflow-hidden bg-white mt-5">
+        <div className="p-4 bg-gray-50/50 border-b border-gray-100 flex flex-col md:flex-row gap-3 items-center">
+          <div className="flex items-center gap-2 mr-2">
+            <Filter className="w-4 h-4 text-gray-400" />
+            <span className="text-sm font-medium text-gray-600">Filtres</span>
+          </div>
+          <div className="relative flex-1 max-w-md w-full">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <Input
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Rechercher un produit..."
+              className="pl-9 h-9 w-full bg-white border-gray-200"
+            />
+          </div>
         </div>
-      ) : (
-        <div className="grid gap-3 md:grid-cols-2">
-          {filtered.map(prod => {
-            const displayPrice = getDisplayPrice(prod);
-            const isCustomPrice = currentTenant && prod.prices && prod.prices[currentTenant] !== undefined;
-            const stock = currentTenant && prod.stock ? (prod.stock[currentTenant] || 0) : 0;
 
-            return (
-              <Card key={prod.id} className="border border-gray-100 shadow-sm">
-                <CardContent className="p-4">
-                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 sm:gap-2">
-                    <div className="flex-1 w-full min-w-0">
-                      <div className="flex items-center gap-2">
-                        <h3 className="font-semibold text-gray-900 truncate">{prod.name}</h3>
-                        {prod.brand && (
-                          <span className="text-[10px] uppercase tracking-wider px-2 py-0.5 bg-gray-100 text-gray-600 rounded">
-                            {prod.brand}
-                          </span>
-                        )}
-                      </div>
-                      {prod.description && <p className="text-sm text-gray-500 mt-1 truncate">{prod.description}</p>}
-                      <div className="mt-3 flex items-center gap-3 text-xs text-gray-400">
-                        <span>Ajouté le {formatDate(prod.createdAt)}</span>
-                        <span>TVA : {prod.vatRate}%</span>
-                        <span className={`px-2 py-0.5 rounded-full font-medium ${stock > 0 ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
-                          En stock : {stock}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-4 w-full sm:w-auto justify-between sm:justify-end border-t border-gray-100 sm:border-0 pt-3 sm:pt-0">
-                      <div className="text-left sm:text-right">
-                        <div className="flex items-center gap-2 justify-start sm:justify-end">
-                          <p className="font-bold text-gray-900">{formatCurrency(displayPrice)} <span className="text-[10px] font-normal text-gray-500">HT</span></p>
-                          <button onClick={() => handleEdit(prod)} className="text-gray-400 hover:text-gray-900">
-                            <Edit2 className="w-3 h-3" />
-                          </button>
+        <div className="overflow-x-auto">
+          {filtered.length === 0 ? (
+            <div className="text-center py-16">
+              <Package className="w-12 h-12 text-gray-200 mx-auto mb-3" />
+              <p className="text-gray-400 font-medium">Aucun produit trouvé</p>
+            </div>
+          ) : (
+            <table className="w-full text-sm text-left">
+              <thead className="bg-gray-50/50 text-xs font-semibold text-gray-500 uppercase tracking-wider border-b border-gray-100">
+                <tr>
+                  <th className="px-4 py-4">Produit</th>
+                  <th className="px-4 py-4">Date d'ajout</th>
+                  <th className="px-4 py-4">TVA</th>
+                  <th className="px-4 py-4 text-center">Stock</th>
+                  <th className="px-4 py-4 text-right">Prix HT</th>
+                  <th className="px-4 py-4 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {filtered.map(prod => {
+                  const displayPrice = getDisplayPrice(prod);
+                  const isCustomPrice = currentTenant && prod.prices && prod.prices[currentTenant] !== undefined;
+                  const stock = currentTenant && prod.stock ? (prod.stock[currentTenant] || 0) : 0;
+
+                  return (
+                    <tr 
+                      key={prod.id} 
+                      className="hover:bg-gray-50/50 transition-colors group cursor-pointer"
+                      onClick={() => handleEdit(prod)}
+                    >
+                      <td className="px-4 py-4">
+                        <div className="flex flex-col">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-gray-900">{prod.name}</span>
+                            {prod.brand && (
+                              <span className="text-[10px] uppercase tracking-wider px-2 py-0.5 bg-gray-100 text-gray-600 rounded">
+                                {prod.brand}
+                              </span>
+                            )}
+                          </div>
+                          {prod.description && <p className="text-xs text-gray-500 mt-0.5 truncate max-w-xs">{prod.description}</p>}
                         </div>
-                        <p className={`font-bold mt-1 ${currentTenant === 'katamine' ? 'text-blue-600' : 'text-yellow-600'}`}>
-                          {formatCurrency(displayPrice * (1 + prod.vatRate / 100))} <span className={`text-[10px] font-normal ${currentTenant === 'katamine' ? 'text-blue-400' : 'text-yellow-400'}`}>TTC</span>
-                        </p>
-                        {!isCustomPrice && (
-                          <p className="text-[10px] text-gray-400 mt-1 italic">Prix par défaut</p>
-                        )}
-                      </div>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0 flex-shrink-0">
-                            <MoreVertical className="w-4 h-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem
-                            onClick={() => handleEdit(prod)}
-                          >
-                            Modifier
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => { if (confirm('Supprimer ce produit (de toutes les entités) ?')) deleteProduct(prod.id); }}
-                            className="text-red-600"
-                          >
-                            Supprimer
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
+                      </td>
+                      <td className="px-4 py-4 text-gray-500">
+                        {formatDate(prod.createdAt)}
+                      </td>
+                      <td className="px-4 py-4 text-gray-500">
+                        {prod.vatRate}%
+                      </td>
+                      <td className="px-4 py-4 text-center">
+                        <span className={`px-2 py-0.5 text-[10px] uppercase tracking-wider rounded-full font-bold ${stock > 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                          {stock} en stock
+                        </span>
+                      </td>
+                      <td className="px-4 py-4 text-right">
+                        <div className="flex flex-col items-end">
+                          <p className="font-bold text-gray-900">{formatCurrency(displayPrice)}</p>
+                          {!isCustomPrice && (
+                            <p className="text-[10px] text-gray-400 mt-0.5 italic">Défaut</p>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-4 py-4 text-right">
+                        <div className="flex justify-end gap-1 items-center opacity-80 group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                                <MoreVertical className="w-4 h-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => handleEdit(prod)}>
+                                <Edit2 className="w-4 h-4 mr-2" /> Modifier
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                onClick={() => { if (confirm('Supprimer ce produit (de toutes les entités) ?')) deleteProduct(prod.id); }}
+                                className="text-red-600 focus:bg-red-50 focus:text-red-700"
+                              >
+                                <FileText className="w-4 h-4 mr-2" /> Supprimer
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
         </div>
-      )}
+      </Card>
 
       {isFormOpen && (
         <ProductForm 

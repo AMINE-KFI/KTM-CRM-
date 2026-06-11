@@ -109,8 +109,8 @@ export default function Tasks() {
             const assignee = task.assigneeId ? (data.employees || []).find(e => e.id === task.assigneeId) : null;
             
             return (
-              <Card key={task.id} className={`border transition-colors group ${task.completed ? 'bg-gray-50/50 border-gray-100' : 'border-gray-200 bg-white hover:border-blue-200'}`}>
-                <CardContent className="p-4 flex items-center gap-4">
+              <Card key={task.id} className={`border transition-all duration-200 group rounded-2xl ${task.completed ? 'bg-gray-50/80 border-gray-100 opacity-75' : 'bg-white border-gray-200/60 shadow-sm hover:shadow-md hover:border-blue-200'}`}>
+                <CardContent className="p-5 flex flex-col sm:flex-row items-start sm:items-center gap-4">
                   <button 
                     onClick={() => toggleTask(task.id, task.completed)}
                     className={`flex-shrink-0 transition-colors ${task.completed ? 'text-green-500' : 'text-gray-300 hover:text-blue-500'}`}
@@ -140,7 +140,7 @@ export default function Tasks() {
                       )}
                       
                       {assignee && (
-                        <span className="flex items-center gap-1 text-gray-600 bg-gray-100 px-2 py-1 rounded-md border border-gray-200">
+                        <span className="flex items-center gap-1 text-blue-700 bg-blue-50 px-2 py-1 rounded-md border border-blue-100 font-medium">
                           <User className="w-3 h-3" /> {assignee.firstName}
                         </span>
                       )}
@@ -153,14 +153,16 @@ export default function Tasks() {
                     </div>
                   </div>
                   
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    onClick={() => { if(confirm('Supprimer cette tâche ?')) deleteTask(task.id); }}
-                    className="text-gray-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
+                  <div className="w-full sm:w-auto mt-2 sm:mt-0 flex justify-end">
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      onClick={() => { if(confirm('Supprimer cette tâche ?')) deleteTask(task.id); }}
+                      className="text-gray-400 hover:text-red-600 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
                 </CardContent>
               </Card>
             );

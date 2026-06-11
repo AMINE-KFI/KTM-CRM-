@@ -6,25 +6,28 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ArrowLeft, Plus, Trash2, Printer } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Printer, CreditCard } from 'lucide-react';
 import { generateDocumentPDF } from '@/lib/pdf';
 import type { DocumentType, DocumentItem, BusinessDocument } from '@/types';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 
 interface DocumentBuilderProps {
   onClose: () => void;
   defaultType?: DocumentType;
   defaultCompanyId?: string;
   initialData?: BusinessDocument;
+  sourceData?: BusinessDocument;
+  onConvert?: (doc: BusinessDocument, targetType: DocumentType) => void;
 }
 
-export default function DocumentBuilder({ onClose, defaultType = 'invoice', defaultCompanyId = '', initialData }: DocumentBuilderProps) {
+export default function DocumentBuilder({ onClose, defaultType = 'invoice', defaultCompanyId = '', initialData, sourceData, onConvert }: DocumentBuilderProps) {
   const { data, addDocument, updateDocument, currentTenant, getCompany } = useCRM();
   
   const isReadOnly = initialData && initialData.status !== 'draft';
 
   const [type, setType] = useState<DocumentType>(initialData?.type || defaultType);
-  const [companyId, setCompanyId] = useState(initialData?.companyId || defaultCompanyId);
-  const [vatRate, setVatRate] = useState<number>(initialData?.vatRate ?? 0.19);
+  const [companyId, setCompanyId] = useState(initialData?.companyId || sourceData?.companyId || defaultCompanyId);
+  const [vatRate, setVatRate] = useState<number>(initialData?.vatRate ?? sourceData?.vatRate ?? 0.19);
   const [issueDate, setIssueDate] = useState(() => initialData?.createdAt ? initialData.createdAt.split('T')[0] : new Date().toISOString().split('T')[0]);
   const [dueDate, setDueDate] = useState(() => {
     if (initialData?.dueDate) return initialData.dueDate;
@@ -32,14 +35,24 @@ export default function DocumentBuilder({ onClose, defaultType = 'invoice', defa
     d.setDate(d.getDate() + 30);
     return d.toISOString().split('T')[0];
   });
-  const [notes, setNotes] = useState(initialData?.notes || '');
+  const [notes, setNotes] = useState(initialData?.notes || sourceData?.notes || '');
+  const [poReference, setPoReference] = useState(initialData?.poReference || sourceData?.poReference || '');
   
-  const [items, setItems] = useState<DocumentItem[]>(initialData?.items || []);
+  const [items, setItems] = useState<DocumentItem[]>(
+    initialData?.items || 
+    (sourceData?.items ? sourceData.items.map(i => ({...i, id: generateId()})) : [])
+  );
+  const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+  const [linkedDocumentId, setLinkedDocumentId] = useState(initialData?.linkedDocumentId || sourceData?.id || undefined);
+  const [linkedDocumentRef, setLinkedDocumentRef] = useState(initialData?.linkedDocumentRef || sourceData?.reference || undefined);
 
   // Calculate totals
   const subTotal = useMemo(() => items.reduce((sum, item) => sum + item.total, 0), [items]);
   const taxAmount = subTotal * vatRate;
   const totalAmount = subTotal + taxAmount;
+
+  const totalPaid = initialData ? (data.payments || []).filter(p => p.documentId === initialData.id).reduce((sum, p) => sum + p.amount, 0) : 0;
+  const balanceDue = initialData ? initialData.totalAmount - totalPaid : 0;
 
   const handleAddItem = () => {
     setItems(prev => [...prev, {
@@ -104,8 +117,11 @@ export default function DocumentBuilder({ onClose, defaultType = 'invoice', defa
       status: targetStatus,
       createdAt: issueDate,
       dueDate,
+      poReference,
       notes,
-      vatRate
+      vatRate,
+      linkedDocumentId,
+      linkedDocumentRef
     };
 
     if (initialData) {
@@ -126,9 +142,23 @@ export default function DocumentBuilder({ onClose, defaultType = 'invoice', defa
     const fs = data.fiscalSettings && initialData.tenant ? data.fiscalSettings[initialData.tenant] : undefined;
 
     if (entity) {
-      generateDocumentPDF(initialData, entity as any, fs);
+      generateDocumentPDF(initialData, entity as any, fs, totalPaid);
     }
   };
+
+  const conversionOptions = (() => {
+    if (!initialData || !onConvert) return [];
+    switch (initialData.type) {
+      case 'proforma':
+        return [{ type: 'invoice' as DocumentType, label: 'Facture' }, { type: 'delivery_note' as DocumentType, label: 'Bon de Livraison' }];
+      case 'invoice':
+        return [{ type: 'delivery_note' as DocumentType, label: 'Bon de Livraison' }];
+      case 'delivery_note':
+        return [{ type: 'invoice' as DocumentType, label: 'Facture' }];
+      default:
+        return [];
+    }
+  })();
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-100 flex flex-col h-full min-h-[600px]">
@@ -145,12 +175,42 @@ export default function DocumentBuilder({ onClose, defaultType = 'invoice', defa
             {initialData && (
               <p className="text-sm font-medium mt-0.5 text-blue-600">Ref: {initialData.reference}</p>
             )}
+            {linkedDocumentRef && !initialData && (
+              <p className="text-sm font-medium mt-0.5 text-blue-600">Suite au: {linkedDocumentRef}</p>
+            )}
           </div>
         </div>
         <div className="flex gap-3">
+          {initialData && conversionOptions.length > 0 && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button type="button" variant="outline" className="gap-2 text-purple-600 border-purple-200 hover:bg-purple-50">
+                  Convertir en...
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                {conversionOptions.map(opt => (
+                  <DropdownMenuItem key={opt.type} onClick={() => onConvert!(initialData, opt.type)}>
+                    {opt.label}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
           {isReadOnly && (
             <Button type="button" variant="outline" onClick={handlePrint} className="gap-2 text-gray-700">
               <Printer className="w-4 h-4" /> Imprimer / PDF
+            </Button>
+          )}
+          {isReadOnly && type === 'invoice' && (
+            <Button 
+               type="button" 
+               className="bg-green-600 hover:bg-green-700 text-white gap-2 shadow-sm"
+               onClick={() => setIsPaymentModalOpen(true)}
+               disabled={balanceDue <= 0}
+            >
+              <CreditCard className="w-4 h-4" /> 
+              {balanceDue > 0 ? 'Encaisser' : 'Déjà soldée'}
             </Button>
           )}
           {(!initialData || initialData.status === 'draft') && (
@@ -229,6 +289,11 @@ export default function DocumentBuilder({ onClose, defaultType = 'invoice', defa
                 <Label>Échéance</Label>
                 <Input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} className="mt-1" disabled={isReadOnly} />
               </div>
+            </div>
+            
+            <div className="col-span-2">
+              <Label>Réf. Bon de Commande (Optionnel)</Label>
+              <Input type="text" placeholder="Ex: BC-2026-045" value={poReference} onChange={e => setPoReference(e.target.value)} className="mt-1" disabled={isReadOnly} />
             </div>
           </div>
 
@@ -352,6 +417,15 @@ export default function DocumentBuilder({ onClose, defaultType = 'invoice', defa
           </div>
         </form>
       </div>
+
+      {isPaymentModalOpen && initialData && (
+        <PaymentModal
+          onClose={() => setIsPaymentModalOpen(false)}
+          defaultCompanyId={initialData.companyId}
+          defaultDocumentId={initialData.id}
+          suggestedAmount={balanceDue > 0 ? balanceDue : undefined}
+        />
+      )}
     </div>
   );
 }

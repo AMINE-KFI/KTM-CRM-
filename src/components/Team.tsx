@@ -43,53 +43,77 @@ export default function Team() {
         </Button>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-2">
-        {(data.employees || []).map(emp => (
-          <Card key={emp.id} className="border border-gray-100 shadow-sm relative group">
-            <CardContent className="p-4 flex items-center gap-4">
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500 to-indigo-700 flex items-center justify-center text-white font-bold text-lg flex-shrink-0">
-                {(emp.firstName || 'U').charAt(0)}{(emp.lastName || '').charAt(0)}
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <h3 className="font-semibold text-gray-900 truncate">{emp.firstName} {emp.lastName}</h3>
-                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${
-                    emp.role === 'admin' ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-600'
-                  }`}>
-                    {emp.role === 'admin' ? 'Gérant' : 'Employé'}
-                  </span>
-                </div>
-                <p className="text-sm text-gray-500 mt-0.5 truncate">{emp.email}</p>
-                <p className="text-xs text-gray-400 mt-1">Ajouté le {formatDate(emp.createdAt)}</p>
-                <p className="text-xs text-gray-500 mt-2 line-clamp-1">
-                  Accès : {emp.role === 'admin' ? 'Total' : (emp.permissions || []).map(p => AVAILABLE_MODULES.find(m => m.id === p)?.label).filter(Boolean).join(', ')}
-                </p>
-              </div>
-              
-              <div className="flex gap-1">
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  onClick={() => { setEditingEmp(emp); setShowForm(true); }}
-                  className="text-gray-400 hover:text-blue-600 h-8 w-8 p-0"
-                >
-                  <Edit className="w-4 h-4" />
-                </Button>
-                {emp.id !== currentUser.id && (
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    onClick={() => { if(confirm(`Supprimer ${emp.firstName} de l'équipe ?`)) deleteEmployee(emp.id); }}
-                    className="text-gray-400 hover:text-red-600 h-8 w-8 p-0"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+      <Card className="border border-gray-200/60 shadow-sm overflow-hidden bg-white mt-5">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm text-left">
+            <thead className="bg-gray-50/50 text-xs font-semibold text-gray-500 uppercase tracking-wider border-b border-gray-100">
+              <tr>
+                <th className="px-4 py-4">Collaborateur</th>
+                <th className="px-4 py-4">Contact</th>
+                <th className="px-4 py-4">Rôle & Accès</th>
+                <th className="px-4 py-4 text-center">Date d'ajout</th>
+                <th className="px-4 py-4 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {(data.employees || []).map(emp => (
+                <tr key={emp.id} className="hover:bg-gray-50/50 transition-colors group">
+                  <td className="px-4 py-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-50 to-blue-50 border border-indigo-100 flex items-center justify-center text-indigo-600 font-bold flex-shrink-0">
+                        {(emp.firstName || 'U').charAt(0)}{(emp.lastName || '').charAt(0)}
+                      </div>
+                      <div>
+                        <p className="font-bold text-gray-900">{emp.firstName} {emp.lastName}</p>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-4 py-4 text-gray-500">
+                    {emp.email}
+                  </td>
+                  <td className="px-4 py-4">
+                    <div className="flex flex-col items-start gap-1">
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${
+                        emp.role === 'admin' ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-600'
+                      }`}>
+                        {emp.role === 'admin' ? 'Gérant' : 'Employé'}
+                      </span>
+                      <p className="text-xs text-gray-400 mt-0.5 truncate max-w-[200px]" title={emp.role === 'admin' ? 'Total' : (emp.permissions || []).map(p => AVAILABLE_MODULES.find(m => m.id === p)?.label).filter(Boolean).join(', ')}>
+                        {emp.role === 'admin' ? 'Accès total' : (emp.permissions || []).map(p => AVAILABLE_MODULES.find(m => m.id === p)?.label).filter(Boolean).join(', ')}
+                      </p>
+                    </div>
+                  </td>
+                  <td className="px-4 py-4 text-center text-gray-500">
+                    {formatDate(emp.createdAt)}
+                  </td>
+                  <td className="px-4 py-4 text-right">
+                    <div className="flex justify-end gap-1 items-center opacity-80 group-hover:opacity-100 transition-opacity">
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        onClick={() => { setEditingEmp(emp); setShowForm(true); }}
+                        className="text-gray-400 hover:text-blue-600 h-8 w-8 p-0"
+                      >
+                        <Edit className="w-4 h-4" />
+                      </Button>
+                      {emp.id !== currentUser.id && (
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          onClick={() => { if(confirm(`Supprimer ${emp.firstName} de l'équipe ?`)) deleteEmployee(emp.id); }}
+                          className="text-gray-400 hover:text-red-600 h-8 w-8 p-0"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
 
       {showForm && (
         <EmployeeForm 

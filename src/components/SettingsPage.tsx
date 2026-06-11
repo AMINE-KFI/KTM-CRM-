@@ -353,7 +353,10 @@ export default function SettingsPage() {
                 if (confirm("ATTENTION : Vous êtes sur le point d'effacer TOUTES vos données. Cette action est irréversible. Êtes-vous vraiment sûr ?")) {
                   const val = prompt("Tapez 'SUPPRIMER' pour confirmer :");
                   if (val === 'SUPPRIMER') {
+                    localStorage.removeItem('katamine_crm_core_db');
                     localStorage.removeItem('katamine_crm_data_v3');
+                    localStorage.removeItem('katamine_crm_data_v2');
+                    localStorage.removeItem('katamine_crm_data');
                     window.location.reload();
                   }
                 }

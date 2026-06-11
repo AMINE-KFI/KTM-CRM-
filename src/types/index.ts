@@ -144,11 +144,14 @@ export interface BusinessDocument {
   companyId: string;
   date: string;
   dueDate?: string;
+  poReference?: string;
   items: DocumentItem[];
   subtotal: number;
   vatAmount: number;
   totalAmount: number;
   notes?: string;
+  linkedDocumentId?: string;
+  linkedDocumentRef?: string;
   tenant: TenantType;
   createdAt: string;
 }

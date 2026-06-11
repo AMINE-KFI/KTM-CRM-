@@ -2,10 +2,8 @@ import { useState } from 'react';
 import { useCRM } from '@/context/CRMContext';
 import type { Company } from '@/types';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 interface CompanyFormProps {
@@ -68,7 +66,7 @@ export default function CompanyForm({ company, defaultRole = 'client', onClose }
           <Section title="Informations générales">
             <div className="grid grid-cols-2 gap-4">
               <div className="col-span-2">
-                <Label>Raison sociale *</Label>
+                            <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">Raison sociale *</label>
                 <Input
                   value={form.name}
                   onChange={e => set('name', e.target.value)}
@@ -78,20 +76,20 @@ export default function CompanyForm({ company, defaultRole = 'client', onClose }
                 />
               </div>
               <div>
-                <Label>Forme juridique</Label>
-                <Select value={form.legalForm} onValueChange={v => set('legalForm', v)}>
-                  <SelectTrigger className="mt-1">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {LEGAL_FORMS.map(f => (
-                      <SelectItem key={f} value={f}>{f}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                            <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">Forme juridique</label>
+                <select
+                  value={form.legalForm}
+                  onChange={e => set('legalForm', e.target.value)}
+                  className="w-full h-10 px-3 py-2 rounded-md border border-gray-300 bg-white mt-1 text-sm"
+                >
+                  <option value="">Sélectionner...</option>
+                  {['SARL', 'EURL', 'SPA', 'SNC', 'SCS', 'Indépendant', 'Autre'].map(f => (
+                    <option key={f} value={f}>{f}</option>
+                  ))}
+                </select>
               </div>
               <div>
-                <Label>Capital social</Label>
+                            <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">Capital social</label>
                 <Input
                   value={form.capital}
                   onChange={e => set('capital', e.target.value)}
@@ -106,7 +104,7 @@ export default function CompanyForm({ company, defaultRole = 'client', onClose }
           <Section title="Coordonnées fiscales">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label>Numéro d'Identification Fiscale (NIF)</Label>
+                            <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">Numéro d'Identification Fiscale (NIF)</label>
                 <Input
                   value={form.nif}
                   onChange={e => set('nif', e.target.value)}
@@ -115,7 +113,7 @@ export default function CompanyForm({ company, defaultRole = 'client', onClose }
                 />
               </div>
               <div>
-                <Label>Numéro d'Identification Statistique (NIS)</Label>
+                            <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">Numéro d'Identification Statistique (NIS)</label>
                 <Input
                   value={form.nis}
                   onChange={e => set('nis', e.target.value)}
@@ -124,7 +122,7 @@ export default function CompanyForm({ company, defaultRole = 'client', onClose }
                 />
               </div>
               <div>
-                <Label>Registre de Commerce (RC)</Label>
+                            <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">Registre de Commerce (RC)</label>
                 <Input
                   value={form.rc}
                   onChange={e => set('rc', e.target.value)}
@@ -133,7 +131,7 @@ export default function CompanyForm({ company, defaultRole = 'client', onClose }
                 />
               </div>
               <div>
-                <Label>Article d'Imposition (ART)</Label>
+                            <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">Article d'Imposition (ART)</label>
                 <Input
                   value={form.art}
                   onChange={e => set('art', e.target.value)}
@@ -142,7 +140,7 @@ export default function CompanyForm({ company, defaultRole = 'client', onClose }
                 />
               </div>
               <div>
-                <Label>Exercice fiscal</Label>
+                <label className="text-sm font-medium leading-none">Exercice fiscal</label>
                 <Input
                   value={form.fiscalYear}
                   onChange={e => set('fiscalYear', e.target.value)}
@@ -157,7 +155,7 @@ export default function CompanyForm({ company, defaultRole = 'client', onClose }
           <Section title="Adresse">
             <div className="grid grid-cols-2 gap-4">
               <div className="col-span-2">
-                <Label>Adresse</Label>
+                <label className="text-sm font-medium leading-none">Adresse</label>
                 <Input
                   value={form.address}
                   onChange={e => set('address', e.target.value)}
@@ -166,7 +164,7 @@ export default function CompanyForm({ company, defaultRole = 'client', onClose }
                 />
               </div>
               <div>
-                <Label>Code postal</Label>
+                <label className="text-sm font-medium leading-none">Code postal</label>
                 <Input
                   value={form.postalCode}
                   onChange={e => set('postalCode', e.target.value)}
@@ -175,7 +173,7 @@ export default function CompanyForm({ company, defaultRole = 'client', onClose }
                 />
               </div>
               <div>
-                <Label>Wilaya / Ville</Label>
+                <label className="text-sm font-medium leading-none">Wilaya / Ville</label>
                 <Input
                   value={form.city}
                   onChange={e => set('city', e.target.value)}
@@ -184,7 +182,7 @@ export default function CompanyForm({ company, defaultRole = 'client', onClose }
                 />
               </div>
               <div>
-                <Label>Pays</Label>
+                <label className="text-sm font-medium leading-none">Pays</label>
                 <Input
                   value={form.country}
                   onChange={e => set('country', e.target.value)}
@@ -199,7 +197,7 @@ export default function CompanyForm({ company, defaultRole = 'client', onClose }
           <Section title="Contact entreprise">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label>Email</Label>
+                <label className="text-sm font-medium leading-none">Email</label>
                 <Input
                   value={form.email}
                   onChange={e => set('email', e.target.value)}
@@ -209,7 +207,7 @@ export default function CompanyForm({ company, defaultRole = 'client', onClose }
                 />
               </div>
               <div>
-                <Label>Téléphone</Label>
+                <label className="text-sm font-medium leading-none">Téléphone</label>
                 <Input
                   value={form.phone}
                   onChange={e => set('phone', e.target.value)}
@@ -218,7 +216,7 @@ export default function CompanyForm({ company, defaultRole = 'client', onClose }
                 />
               </div>
               <div className="col-span-2">
-                <Label>Site web</Label>
+                <label className="text-sm font-medium leading-none">Site web</label>
                 <Input
                   value={form.website}
                   onChange={e => set('website', e.target.value)}
@@ -231,7 +229,7 @@ export default function CompanyForm({ company, defaultRole = 'client', onClose }
 
           {/* Notes */}
           <div>
-            <Label>Notes internes</Label>
+            <label className="text-sm font-medium leading-none">Notes internes</label>
             <Textarea
               value={form.notes}
               onChange={e => set('notes', e.target.value)}

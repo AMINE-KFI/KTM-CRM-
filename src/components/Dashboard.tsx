@@ -23,7 +23,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
   
   const stats = useMemo(() => {
     const totalCompanies = data.companies.filter(c => c.role === 'client' || !c.role || c.role === 'both').length;
-    const totalContacts = data.companies.reduce((sum, c) => sum + c.contacts.length, 0);
+    const totalContacts = (data.companies || []).reduce((sum, c) => sum + (c.contacts || []).length, 0);
     const erpInvoices = (data.documents || []).filter((d: any) => d.type === 'invoice');
     const totalInvoices = erpInvoices.length;
     const unpaidInvoices = erpInvoices.filter((i: any) => i.status !== 'paid').length;
@@ -101,29 +101,26 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
 
       {/* Financial Overview */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <Card className="border-0 shadow-sm bg-gradient-to-br from-emerald-50 to-green-50 overflow-hidden">
-          <CardContent className="p-5">
-            <div className="flex items-center justify-between gap-4">
-              <div className="min-w-0 flex-1">
-                <p className="text-sm text-emerald-700 font-medium truncate">Total Encaissé</p>
-                <p className="text-xl sm:text-2xl font-bold text-emerald-800 mt-1 truncate">{formatCurrency(totalPaid)}</p>
-              </div>
-              <div className="p-3 bg-emerald-100 rounded-xl flex-shrink-0">
-                <TrendingUp className="w-6 h-6 text-emerald-600" />
-              </div>
+        <Card className="border border-emerald-100 shadow-sm bg-gradient-to-br from-emerald-50 to-green-50 overflow-hidden rounded-2xl relative cursor-pointer hover:shadow-md transition-all" onClick={() => onNavigate('documents')}>
+          <div className="absolute -right-6 -bottom-6 opacity-10 pointer-events-none scale-150">
+            <TrendingUp className="w-24 h-24 text-emerald-900" />
+          </div>
+          <CardContent className="p-5 sm:p-6 relative z-10">
+            <div className="flex flex-col gap-1">
+              <p className="text-xs font-bold text-emerald-700 uppercase tracking-wider">Total Encaissé</p>
+              <p className="text-2xl sm:text-4xl font-bold text-emerald-900 mt-1 truncate">{formatCurrency(totalPaid)}</p>
             </div>
           </CardContent>
         </Card>
-        <Card className="border-0 shadow-sm bg-gradient-to-br from-red-50 to-orange-50 overflow-hidden">
-          <CardContent className="p-5">
-            <div className="flex items-center justify-between gap-4">
-              <div className="min-w-0 flex-1">
-                <p className="text-sm text-red-700 font-medium truncate">En attente de paiement</p>
-                <p className="text-xl sm:text-2xl font-bold text-red-800 mt-1 truncate">{formatCurrency(totalUnpaid)}</p>
-              </div>
-              <div className="p-3 bg-red-100 rounded-xl flex-shrink-0">
-                <TrendingDown className="w-6 h-6 text-red-600" />
-              </div>
+        
+        <Card className="border border-red-100 shadow-sm bg-gradient-to-br from-red-50 to-orange-50 overflow-hidden rounded-2xl relative cursor-pointer hover:shadow-md transition-all" onClick={() => onNavigate('documents')}>
+          <div className="absolute -right-6 -bottom-6 opacity-10 pointer-events-none scale-150">
+            <TrendingDown className="w-24 h-24 text-red-900" />
+          </div>
+          <CardContent className="p-5 sm:p-6 relative z-10">
+            <div className="flex flex-col gap-1">
+              <p className="text-xs font-bold text-red-700 uppercase tracking-wider">En attente de paiement</p>
+              <p className="text-2xl sm:text-4xl font-bold text-red-900 mt-1 truncate">{formatCurrency(totalUnpaid)}</p>
             </div>
           </CardContent>
         </Card>
@@ -151,11 +148,11 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
         <Card className="border-0 shadow-sm flex flex-col">
           <CardHeader className="pb-3 pt-5 px-5 border-b border-gray-50 bg-white sticky top-0 z-10 rounded-t-xl">
             <div className="flex items-center justify-between">
-              <CardTitle className="text-sm font-semibold text-gray-800 flex items-center gap-2">
+              <CardTitle className="text-sm font-semibold text-gray-800 uppercase tracking-wider flex items-center gap-2">
                 <FileText className="w-4 h-4 text-emerald-500" />
                 Factures récentes
               </CardTitle>
-              <Button variant="ghost" size="sm" className="text-xs text-blue-600" onClick={() => onNavigate('documents')}>
+              <Button variant="ghost" size="sm" className="text-xs text-blue-600 font-semibold" onClick={() => onNavigate('documents')}>
                 Voir tout
               </Button>
             </div>
@@ -176,8 +173,8 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
                         )}
                       </div>
                       <div>
-                        <p className="font-medium text-sm text-gray-900">{inv.invoiceNumber}</p>
-                        <p className="text-xs text-gray-400">{inv.company?.name} · {formatDate(inv.dueDate)}</p>
+                        <p className="font-bold text-sm text-gray-900">{inv.invoiceNumber}</p>
+                        <p className="text-xs font-medium text-gray-500">{inv.company?.name} · {formatDate(inv.dueDate)}</p>
                       </div>
                     </div>
                     <div className="text-right">
@@ -291,27 +288,29 @@ function NotificationFeed({ data, onNavigate, overdueInvoices }: { data: any, on
 function StatCard({ label, value, icon, color, onClick }: {
   label: string; value: number | string; icon: React.ReactNode; color: string; onClick: () => void;
 }) {
-  const colorMap: Record<string, string> = {
-    blue: 'bg-blue-50 border-blue-100 text-blue-700',
-    violet: 'bg-violet-50 border-violet-100 text-violet-700',
-    emerald: 'bg-emerald-50 border-emerald-100 text-emerald-700',
-    red: 'bg-red-50 border-red-100 text-red-700',
-    amber: 'bg-amber-50 border-amber-100 text-amber-700',
-    indigo: 'bg-indigo-50 border-indigo-100 text-indigo-700',
+  const colorMap: Record<string, { bg: string; text: string; iconCol: string }> = {
+    blue: { bg: 'bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-100', text: 'text-blue-900', iconCol: 'text-blue-900' },
+    violet: { bg: 'bg-gradient-to-br from-violet-50 to-purple-50 border-violet-100', text: 'text-violet-900', iconCol: 'text-violet-900' },
+    emerald: { bg: 'bg-gradient-to-br from-emerald-50 to-green-50 border-emerald-100', text: 'text-emerald-900', iconCol: 'text-emerald-900' },
+    red: { bg: 'bg-gradient-to-br from-red-50 to-rose-50 border-red-100', text: 'text-red-900', iconCol: 'text-red-900' },
+    amber: { bg: 'bg-gradient-to-br from-amber-50 to-yellow-50 border-amber-100', text: 'text-amber-900', iconCol: 'text-amber-900' },
+    indigo: { bg: 'bg-gradient-to-br from-indigo-50 to-blue-50 border-indigo-100', text: 'text-indigo-900', iconCol: 'text-indigo-900' },
   };
+
+  const style = colorMap[color] || colorMap.blue;
 
   return (
     <Card
-      className={`border shadow-sm cursor-pointer transition-all hover:shadow-md hover:-translate-y-0.5 bg-white`}
+      className={`border shadow-sm cursor-pointer transition-all hover:shadow-md hover:-translate-y-0.5 rounded-2xl relative overflow-hidden ${style.bg}`}
       onClick={onClick}
     >
-      <CardContent className="p-3 sm:p-4">
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0 flex-1">
-            <p className="text-xs font-medium text-gray-500 leading-tight truncate" title={label}>{label}</p>
-            <p className="text-lg sm:text-2xl font-bold text-gray-900 mt-1 truncate" title={String(value)}>{value}</p>
-          </div>
-          <div className={`mt-0.5 p-2 rounded-lg flex-shrink-0 ${colorMap[color]}`}>{icon}</div>
+      <div className={`absolute -right-4 -bottom-4 opacity-5 pointer-events-none scale-[2]`}>
+        {icon}
+      </div>
+      <CardContent className="p-4 sm:p-5 relative z-10">
+        <div className="flex flex-col gap-1">
+          <p className="text-xs font-bold text-gray-500 uppercase tracking-wider truncate" title={label}>{label}</p>
+          <p className={`text-xl sm:text-3xl font-bold mt-1 truncate ${style.text}`} title={String(value)}>{value}</p>
         </div>
       </CardContent>
     </Card>

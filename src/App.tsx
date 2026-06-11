@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import ErrorBoundary from './components/ErrorBoundary';
 import { CRMProvider, useCRM } from './context/CRMContext';
 import Dashboard from './components/Dashboard';
 import Companies from './components/Companies';
@@ -235,8 +236,10 @@ function SidebarContent({ page, navigate, navItems, theme }: { page: Page; navig
 
 export default function App() {
   return (
-    <CRMProvider>
-      <AppLayout />
-    </CRMProvider>
+    <ErrorBoundary>
+      <CRMProvider>
+        <AppLayout />
+      </CRMProvider>
+    </ErrorBoundary>
   );
 }

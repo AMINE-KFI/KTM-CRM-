@@ -1,6 +1,6 @@
 import type { CRMData, ReminderSettings } from '../types';
 
-const STORAGE_KEY = 'katamine_crm_data_v3';
+const STORAGE_KEY = 'katamine_crm_core_db';
 
 const defaultSettings: ReminderSettings = {
   enabled: true,
@@ -52,7 +52,11 @@ const defaultData: CRMData = {
   fiscalSettings: {
     katamine: { companyName: 'Katamine', address: '', rc: '', nif: '', nis: '', art: '', capital: '', phone: '', email: '', bankInfo: '' },
     kltools: { companyName: 'KL Tools', address: '', rc: '', nif: '', nis: '', art: '', capital: '', phone: '', email: '', bankInfo: '' }
-  }
+  },
+  documents: [],
+  payments: [],
+  stockMovements: [],
+  documentCounters: {}
 };
 
 export function loadData(): CRMData {
@@ -60,39 +64,69 @@ export function loadData(): CRMData {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored) {
       const parsed = JSON.parse(stored);
-      // migrations for old data
-      if (!parsed.employees) parsed.employees = defaultData.employees;
-      if (!parsed.activityLogs) parsed.activityLogs = [];
-      if (!parsed.readNotifications) parsed.readNotifications = {};
       
-      // Clean up old mock data that didn't have a tenant (to avoid duplicate ID conflicts and old data)
-      parsed.employees = parsed.employees.filter((e: any) => 
+      // SANITIZATION AND VALIDATION (ANTI-WHITE PAGE)
+      const sanitizedData: CRMData = {
+        ...defaultData,
+        ...parsed,
+        companies: Array.isArray(parsed.companies) ? parsed.companies.map((c: any) => ({
+          ...c,
+          contacts: Array.isArray(c.contacts) ? c.contacts : []
+        })) : [],
+        invoices: Array.isArray(parsed.invoices) ? parsed.invoices : [],
+        products: Array.isArray(parsed.products) ? parsed.products : [],
+        quotes: Array.isArray(parsed.quotes) ? parsed.quotes : [],
+        deals: Array.isArray(parsed.deals) ? parsed.deals : [],
+        tasks: Array.isArray(parsed.tasks) ? parsed.tasks : [],
+        notes: Array.isArray(parsed.notes) ? parsed.notes : [],
+        employees: Array.isArray(parsed.employees) && parsed.employees.length > 0 ? parsed.employees : defaultData.employees,
+        activityLogs: Array.isArray(parsed.activityLogs) ? parsed.activityLogs : [],
+        readNotifications: typeof parsed.readNotifications === 'object' && parsed.readNotifications !== null ? parsed.readNotifications : {},
+        documents: Array.isArray(parsed.documents) ? parsed.documents.map((d: any) => ({
+          ...d,
+          items: Array.isArray(d.items) ? d.items : []
+        })) : [],
+        payments: Array.isArray(parsed.payments) ? parsed.payments : [],
+        stockMovements: Array.isArray(parsed.stockMovements) ? parsed.stockMovements : [],
+        documentCounters: typeof parsed.documentCounters === 'object' && parsed.documentCounters !== null ? parsed.documentCounters : {},
+        reminderSettings: {
+          ...defaultSettings,
+          ...parsed.reminderSettings
+        },
+        fiscalSettings: {
+          katamine: { ...defaultData.fiscalSettings?.katamine, ...(parsed.fiscalSettings?.katamine || {}) },
+          kltools: { ...defaultData.fiscalSettings?.kltools, ...(parsed.fiscalSettings?.kltools || {}) }
+        }
+      };
+
+      // Clean up mock employees that might cause tenant collision issues
+      sanitizedData.employees = sanitizedData.employees.filter((e: any) => 
         e.tenant || e.email.includes('@katamine.dz') || e.email.includes('@kltools.dz')
       );
-
-      // Force user to login again for testing login page
-      parsed.currentUserId = null;
-      parsed.currentTenant = null;
       
-      // Update missing passwords on load
-      parsed.employees = parsed.employees.map((e: any) => ({
+      // Ensure default admins
+      if (!sanitizedData.employees.find((e: any) => e.email === 'dg@katamine.dz')) {
+        sanitizedData.employees.push(defaultData.employees[0]);
+      }
+      if (!sanitizedData.employees.find((e: any) => e.email === 'dg@kltools.dz')) {
+        sanitizedData.employees.push(defaultData.employees[1]);
+      }
+
+      // Ensure passwords and permissions exist
+      sanitizedData.employees = sanitizedData.employees.map((e: any) => ({
         ...e,
         password: e.password || '12345',
         permissions: e.permissions || (e.role === 'admin' ? defaultData.employees[0].permissions : defaultData.employees[1].permissions)
       }));
 
-      // Ensure both default admins exist if missing
-      if (!parsed.employees.find((e: any) => e.email === 'dg@katamine.dz')) {
-        parsed.employees.push(defaultData.employees[0]);
-      }
-      if (!parsed.employees.find((e: any) => e.email === 'dg@kltools.dz')) {
-        parsed.employees.push(defaultData.employees[1]);
-      }
+      // Security measure: always demand login on reload
+      sanitizedData.currentUserId = null;
+      sanitizedData.currentTenant = null;
 
-      return parsed;
+      return sanitizedData;
     }
   } catch (e) {
-    console.error('Error loading data:', e);
+    console.error('Error loading clean data:', e);
   }
   return defaultData;
 }
@@ -163,7 +197,6 @@ export function getDepartmentLabel(dept: string): string {
   return labels[dept] || dept;
 }
 
-// Simulate sending reminder email (in real app, would call backend API)
 export function sendReminderEmail(
   contactEmail: string,
   invoiceNumber: string,
@@ -176,9 +209,7 @@ export function sendReminderEmail(
   const subject = getReminderSubject(invoiceNumber, reminderCount);
   const body = getReminderBody(invoiceNumber, amount, dueDate, reminderCount, settings, issueDate);
   
-  // Create mailto link for simulation
-  const mailtoLink = `mailto:${contactEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-  return mailtoLink;
+  return `mailto:${contactEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 }
 
 function getReminderSubject(invoiceNumber: string, reminderCount: number): string {

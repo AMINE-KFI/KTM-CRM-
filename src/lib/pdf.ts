@@ -153,7 +153,7 @@ export function exportProductsToPDF(products: Product[], tenant?: string | null)
   doc.save('catalogue_export.pdf');
 }
 
-export function generateDocumentPDF(docData: BusinessDocument, company: Company, fiscalSettings?: FiscalSettings) {
+export function generateDocumentPDF(docData: BusinessDocument, company: Company, fiscalSettings?: FiscalSettings, totalPaid: number = 0) {
   const doc = new jsPDF();
   const isKLTools = docData.tenant === 'kltools';
 
@@ -210,9 +210,26 @@ export function generateDocumentPDF(docData: BusinessDocument, company: Company,
 
   doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
-  doc.text(`Date d'émission : ${formatDate(docData.createdAt)}`, 14, 68);
+  let yPos = 68;
+  doc.text(`Date d'émission : ${formatDate(docData.createdAt)}`, 14, yPos);
+  yPos += 5;
+  
   if (docData.dueDate) {
-    doc.text(`Échéance : ${formatDate(docData.dueDate)}`, 14, 73);
+    doc.text(`Échéance : ${formatDate(docData.dueDate)}`, 14, yPos);
+    yPos += 5;
+  }
+  if (docData.poReference) {
+    doc.setFont('helvetica', 'bold');
+    doc.text(`Réf. BC : ${docData.poReference}`, 14, yPos);
+    doc.setFont('helvetica', 'normal');
+    yPos += 5;
+  }
+  if (docData.linkedDocumentRef) {
+    doc.setFont('helvetica', 'italic');
+    doc.setTextColor(100);
+    doc.text(`Suite au : ${docData.linkedDocumentRef}`, 14, yPos);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(0);
   }
 
   // 4. Tableau des articles
@@ -260,13 +277,37 @@ export function generateDocumentPDF(docData: BusinessDocument, company: Company,
   doc.text('NET A PAYER :', 160, finalY + 16, { align: 'right' });
   doc.text(formatCurrency(docData.totalAmount), 196, finalY + 16, { align: 'right' });
 
+  let wordsY = finalY + 30;
+
+  if (totalPaid > 0) {
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.text('Total Payé :', 160, finalY + 23, { align: 'right' });
+    doc.text(formatCurrency(totalPaid), 196, finalY + 23, { align: 'right' });
+    
+    const balance = docData.totalAmount - totalPaid;
+    doc.setFont('helvetica', 'bold');
+    doc.text('Reste à Payer :', 160, finalY + 29, { align: 'right' });
+    doc.text(formatCurrency(balance > 0 ? balance : 0), 196, finalY + 29, { align: 'right' });
+
+    if (balance <= 0) {
+      doc.setTextColor(39, 174, 96);
+      doc.setFontSize(14);
+      doc.text('FACTURE SOLDÉE', 196, finalY + 38, { align: 'right' });
+      doc.setTextColor(0);
+      wordsY += 15;
+    } else {
+      wordsY += 10;
+    }
+  }
+
   // Montant en lettres
   doc.setFontSize(10);
   doc.setFont('helvetica', 'italic');
-  doc.text('Arrêté la présente facture à la somme de :', 14, finalY + 30);
+  doc.text('Arrêté la présente facture à la somme de :', 14, wordsY);
   doc.setFont('helvetica', 'bolditalic');
   const amountInWords = numberToWordsFR(docData.totalAmount);
-  doc.text(amountInWords, 14, finalY + 35, { maxWidth: 120 });
+  doc.text(amountInWords, 14, wordsY + 5, { maxWidth: 120 });
 
   // Bank Details
   doc.setFont('helvetica', 'normal');
