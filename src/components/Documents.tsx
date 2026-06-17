@@ -2,10 +2,12 @@ import { useState, useMemo } from 'react';
 import { useCRM } from '@/context/CRMContext';
 import { formatCurrency, formatDate } from '@/lib/storage';
 import { generateDocumentPDF } from '@/lib/pdf';
+import type { PrintOptions } from '@/lib/pdf';
+import { PrintOptionsModal } from './PrintOptionsModal';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { FileText, Search, Plus, Download, CreditCard, Edit, Trash2, Filter, TrendingUp, AlertCircle } from 'lucide-react';
+import { Plus, Search, FileText, Filter, TrendingUp, CreditCard, Download, ArrowUpDown, ArrowUp, ArrowDown, Edit, Trash2 } from 'lucide-react';
 import DocumentBuilder from './DocumentBuilder';
 import PaymentModal from './PaymentModal';
 import type { BusinessDocument, DocumentType } from '@/types';
@@ -13,14 +15,17 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 export default function Documents({ docGroup = 'sales' }: { docGroup?: 'sales' | 'purchases' }) {
-  const { data, getCompany, updateDocument, deleteDocument } = useCRM();
+  const { data, getCompany, updateDocument, deleteDocument, addActivityLog, currentUser, currentTenant } = useCRM();
   const [showDocBuilder, setShowDocBuilder] = useState(false);
   const [editDocument, setEditDocument] = useState<BusinessDocument | null>(null);
   const [convertingDoc, setConvertingDoc] = useState<BusinessDocument | null>(null);
   const [convertingTargetType, setConvertingTargetType] = useState<DocumentType | null>(null);
+  const [printDoc, setPrintDoc] = useState<BusinessDocument | null>(null);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState<string>('all');
+  const [sortColumn, setSortColumn] = useState<string>('date');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
 
   const documents = (data.documents || []).filter(d => !data.currentTenant || d.tenant === data.currentTenant);
 
@@ -41,8 +46,39 @@ export default function Documents({ docGroup = 'sales' }: { docGroup?: 'sales' |
       const typeMatch = filterType === 'all' || doc.type === filterType;
 
       return searchMatch && typeMatch;
-    }).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    });
   }, [documents, searchTerm, filterType, getCompany, data.companies]);
+
+  const sortedDocuments = useMemo(() => {
+    return [...filteredDocuments].sort((a, b) => {
+      let comparison = 0;
+      switch (sortColumn) {
+        case 'reference':
+          comparison = (a.reference || '').localeCompare(b.reference || '');
+          break;
+        case 'entity': {
+          const entityA = a.type === 'purchase_order' || a.type === 'supplier_invoice' || a.type === 'receipt_note'
+            ? data.companies.find(c => c.id === a.companyId && (c.role === 'supplier' || c.role === 'both'))
+            : getCompany(a.companyId);
+          const entityB = b.type === 'purchase_order' || b.type === 'supplier_invoice' || b.type === 'receipt_note'
+            ? data.companies.find(c => c.id === b.companyId && (c.role === 'supplier' || c.role === 'both'))
+            : getCompany(b.companyId);
+          comparison = (entityA?.name || '').localeCompare(entityB?.name || '');
+          break;
+        }
+        case 'date':
+          comparison = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+          break;
+        case 'amount':
+          comparison = a.totalAmount - b.totalAmount;
+          break;
+        case 'status':
+          comparison = a.status.localeCompare(b.status);
+          break;
+      }
+      return sortDirection === 'asc' ? comparison : -comparison;
+    });
+  }, [filteredDocuments, sortColumn, sortDirection, data.companies, getCompany]);
 
   const kpis = useMemo(() => {
     const isSales = docGroup === 'sales';
@@ -92,16 +128,21 @@ export default function Documents({ docGroup = 'sales' }: { docGroup?: 'sales' |
   };
 
   const handlePrint = (doc: BusinessDocument) => {
-    const isPurchase = doc.type === 'purchase_order' || doc.type === 'supplier_invoice' || doc.type === 'receipt_note';
-    const entity = isPurchase
-      ? data.companies.find(c => c.id === doc.companyId && (c.role === 'supplier' || c.role === 'both'))
-      : getCompany(doc.companyId);
+    setPrintDoc(doc);
+  };
 
-    const fs = data.fiscalSettings && doc.tenant ? data.fiscalSettings[doc.tenant] : undefined;
+  const handlePrintConfirm = (options: PrintOptions) => {
+    if (!printDoc) return;
+    const isPurchase = printDoc.type === 'purchase_order' || printDoc.type === 'supplier_invoice' || printDoc.type === 'receipt_note';
+    const entity = isPurchase
+      ? data.companies.find(c => c.id === printDoc.companyId && (c.role === 'supplier' || c.role === 'both'))
+      : getCompany(printDoc.companyId);
+
+    const fs = data.fiscalSettings && printDoc.tenant ? data.fiscalSettings[printDoc.tenant] : undefined;
 
     if (entity) {
       // Cast entity to any since the PDF generator expects a Company type
-      generateDocumentPDF(doc, entity as any, fs);
+      generateDocumentPDF(printDoc, entity as any, fs, 0, false, options);
     } else {
       alert("Erreur: Entité introuvable");
     }
@@ -119,6 +160,22 @@ export default function Documents({ docGroup = 'sales' }: { docGroup?: 'sales' |
     }
   };
 
+  const handleDevalidateDocument = (docId: string) => {
+    if (confirm("Voulez-vous vraiment dévalider ce document pour le modifier ? Il repassera en statut Brouillon.")) {
+      updateDocument(docId, { status: 'draft' });
+      const doc = data.documents?.find(d => d.id === docId);
+      if (currentUser && doc) {
+        addActivityLog({
+          type: 'document_unvalidated',
+          title: 'Document dévalidé',
+          description: `${currentUser.firstName} a dévalidé le document ${doc.reference || 'sans référence'} pour modification`,
+          userId: currentUser.id,
+          tenant: currentTenant || 'katamine',
+        });
+      }
+    }
+  };
+
   const handleDeleteDocument = (docId: string) => {
     if (confirm("Supprimer définitivement ce brouillon ?")) {
       deleteDocument(docId);
@@ -132,6 +189,22 @@ export default function Documents({ docGroup = 'sales' }: { docGroup?: 'sales' |
       case 'delivery_note': return [{ type: 'invoice', label: 'Facture' }];
       default: return [];
     }
+  };
+
+  const handleSort = (column: string) => {
+    if (sortColumn === column) {
+      setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortColumn(column);
+      setSortDirection('asc');
+    }
+  };
+
+  const SortIcon = ({ column }: { column: string }) => {
+    if (sortColumn !== column) return <ArrowUpDown className="w-3 h-3 ml-1 opacity-40 group-hover:opacity-100" />;
+    return sortDirection === 'asc' 
+      ? <ArrowUp className="w-3 h-3 ml-1 text-blue-600" />
+      : <ArrowDown className="w-3 h-3 ml-1 text-blue-600" />;
   };
 
   if (showDocBuilder || editDocument || convertingDoc) {
@@ -241,16 +314,26 @@ export default function Documents({ docGroup = 'sales' }: { docGroup?: 'sales' |
             <table className="w-full text-sm text-left">
               <thead className="bg-gray-50/50 text-xs font-semibold text-gray-500 uppercase tracking-wider border-b border-gray-100">
                 <tr>
-                  <th className="px-4 py-4 whitespace-nowrap">Référence</th>
-                  <th className="px-4 py-4">Client / Fournisseur</th>
-                  <th className="px-4 py-4">Date</th>
-                  <th className="px-4 py-4 text-right">Montant</th>
-                  <th className="px-4 py-4 text-center">Statut</th>
+                  <th className="px-4 py-4 whitespace-nowrap cursor-pointer group" onClick={() => handleSort('reference')}>
+                    <div className="flex items-center">Référence <SortIcon column="reference" /></div>
+                  </th>
+                  <th className="px-4 py-4 cursor-pointer group" onClick={() => handleSort('entity')}>
+                    <div className="flex items-center">Client / Fournisseur <SortIcon column="entity" /></div>
+                  </th>
+                  <th className="px-4 py-4 cursor-pointer group" onClick={() => handleSort('date')}>
+                    <div className="flex items-center">Date <SortIcon column="date" /></div>
+                  </th>
+                  <th className="px-4 py-4 text-right cursor-pointer group" onClick={() => handleSort('amount')}>
+                    <div className="flex items-center justify-end">Montant <SortIcon column="amount" /></div>
+                  </th>
+                  <th className="px-4 py-4 text-center cursor-pointer group" onClick={() => handleSort('status')}>
+                    <div className="flex items-center justify-center">Statut <SortIcon column="status" /></div>
+                  </th>
                   <th className="px-4 py-4 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {filteredDocuments.map(doc => {
+                {sortedDocuments.map(doc => {
                   const entity = doc.type === 'purchase_order' || doc.type === 'supplier_invoice' || doc.type === 'receipt_note'
                     ? data.companies.find(c => c.id === doc.companyId && (c.role === 'supplier' || c.role === 'both'))
                     : getCompany(doc.companyId);
@@ -301,9 +384,14 @@ export default function Documents({ docGroup = 'sales' }: { docGroup?: 'sales' |
                             </>
                           )}
                           {(doc.status === 'validated' || doc.status === 'partially_paid') && (
-                            <Button variant="ghost" size="sm" onClick={() => handleCancelDocument(doc.id)} className="text-red-400 hover:text-red-600 hover:bg-red-50 text-xs px-2 h-8">
-                              Annuler
-                            </Button>
+                            <>
+                              <Button variant="ghost" size="sm" onClick={() => handleDevalidateDocument(doc.id)} className="text-orange-500 hover:text-orange-700 hover:bg-orange-50 text-xs px-2 h-8">
+                                Dévalider
+                              </Button>
+                              <Button variant="ghost" size="sm" onClick={() => handleCancelDocument(doc.id)} className="text-red-400 hover:text-red-600 hover:bg-red-50 text-xs px-2 h-8">
+                                Annuler
+                              </Button>
+                            </>
                           )}
                           {getConversionOptions(doc).length > 0 && (
                             <DropdownMenu>
@@ -340,6 +428,12 @@ export default function Documents({ docGroup = 'sales' }: { docGroup?: 'sales' |
       </Card>
 
       {showPaymentModal && <PaymentModal onClose={() => setShowPaymentModal(false)} />}
+
+      <PrintOptionsModal 
+        isOpen={!!printDoc} 
+        onClose={() => setPrintDoc(null)} 
+        onConfirm={handlePrintConfirm} 
+      />
     </div>
   );
 }

@@ -153,7 +153,14 @@ export function exportProductsToPDF(products: Product[], tenant?: string | null)
   doc.save('catalogue_export.pdf');
 }
 
-export function generateDocumentPDF(docData: BusinessDocument, company: Company, fiscalSettings?: FiscalSettings, totalPaid: number = 0, returnBlob: boolean = false): Blob | void {
+export interface PrintOptions {
+  annule?: boolean;
+  retour?: boolean;
+  complement?: boolean;
+  duplicata?: boolean;
+}
+
+export function generateDocumentPDF(docData: BusinessDocument, company: Company, fiscalSettings?: FiscalSettings, totalPaid: number = 0, returnBlob: boolean = false, printOptions?: PrintOptions): Blob | void {
   const doc = new jsPDF();
   const isKLTools = docData.tenant === 'kltools';
 
@@ -205,7 +212,12 @@ export function generateDocumentPDF(docData: BusinessDocument, company: Company,
   doc.setFontSize(16);
   doc.setTextColor(0);
   doc.setFont('helvetica', 'bold');
-  const docTitle = `${docTypeLabels[docData.type] || 'DOCUMENT'} N° ${docData.reference}`;
+  let extraTitleTags = '';
+  if (printOptions?.retour) extraTitleTags += '(Retour)';
+  if (printOptions?.complement) extraTitleTags += '[COMPLEMENT]';
+  if (printOptions?.annule) extraTitleTags += '[ANNULE]';
+
+  const docTitle = `${docTypeLabels[docData.type] || 'DOCUMENT'}${extraTitleTags} N° ${docData.reference}`;
   doc.text(docTitle, 14, 60);
 
   doc.setFontSize(10);
@@ -365,10 +377,43 @@ export function generateDocumentPDF(docData: BusinessDocument, company: Company,
   }
   doc.text(bankDetails, 14, bankY);
 
-  const pdfBlob = doc.output('blob');
-  if (returnBlob) {
-    return pdfBlob;
+  // 12. Add watermark if needed
+  if (printOptions?.annule || printOptions?.duplicata) {
+    const watermarkTexts = [];
+    if (printOptions.annule) watermarkTexts.push('ANNULEE');
+    if (printOptions.duplicata) watermarkTexts.push('DUPLICATA');
+    const watermarkText = watermarkTexts.join(' - ');
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(65);
+    
+    if (printOptions.annule) {
+      // Red color for Annulée
+      doc.setTextColor(231, 76, 60); 
+    } else {
+      // Darker gray for Duplicata
+      doc.setTextColor(80, 80, 80);
+    }
+
+    // Set opacity for watermark if possible
+    try {
+      doc.setGState(new (doc as any).GState({opacity: 0.45}));
+    } catch(e) {}
+    
+    // Draw rotated text in the middle
+    doc.text(watermarkText, 105, 150, { angle: 45, align: 'center' });
+    
+    try {
+      doc.setGState(new (doc as any).GState({opacity: 1}));
+    } catch(e) {}
+    
+    // Reset font back to normal just in case
+    doc.setFont('helvetica', 'normal');
   }
-  const pdfUrl = URL.createObjectURL(pdfBlob);
+
+  if (returnBlob) {
+    return doc.output('blob');
+  }
+  const pdfUrl = URL.createObjectURL(doc.output('blob'));
   window.open(pdfUrl, '_blank');
 }

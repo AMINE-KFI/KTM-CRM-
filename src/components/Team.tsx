@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useCRM } from '@/context/CRMContext';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Plus, Trash2, ShieldAlert, Edit, X } from 'lucide-react';
+import { Plus, Trash2, ShieldAlert, Edit, X, ArrowUpDown } from 'lucide-react';
 import { formatDate } from '@/lib/storage';
 import type { Employee } from '@/types';
 
@@ -20,6 +20,28 @@ export default function Team() {
   const { data, addEmployee, updateEmployee, deleteEmployee, currentUser } = useCRM();
   const [showForm, setShowForm] = useState(false);
   const [editingEmp, setEditingEmp] = useState<Employee | null>(null);
+  const [sortConfig, setSortConfig] = useState<{ key: keyof Employee; direction: 'asc' | 'desc' } | null>({ key: 'createdAt', direction: 'desc' });
+
+  const sortedEmployees = useMemo(() => {
+    const list = [...(data.employees || [])];
+    if (sortConfig) {
+      list.sort((a, b) => {
+        const aVal = a[sortConfig.key] || '';
+        const bVal = b[sortConfig.key] || '';
+        if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
+        if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
+        return 0;
+      });
+    }
+    return list;
+  }, [data.employees, sortConfig]);
+
+  const toggleSort = (key: keyof Employee) => {
+    setSortConfig(prev => ({
+      key,
+      direction: prev?.key === key && prev.direction === 'desc' ? 'asc' : 'desc'
+    }));
+  };
 
   if (currentUser?.role !== 'admin') {
     return (
@@ -46,17 +68,25 @@ export default function Team() {
       <Card className="border border-gray-200/60 shadow-sm overflow-hidden bg-white mt-5">
         <div className="overflow-x-auto">
           <table className="w-full text-sm text-left">
-            <thead className="bg-gray-50/50 text-xs font-semibold text-gray-500 uppercase tracking-wider border-b border-gray-100">
-              <tr>
-                <th className="px-4 py-4">Collaborateur</th>
-                <th className="px-4 py-4">Contact</th>
-                <th className="px-4 py-4">Rôle & Accès</th>
-                <th className="px-4 py-4 text-center">Date d'ajout</th>
-                <th className="px-4 py-4 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50">
-              {(data.employees || []).map(emp => (
+              <thead className="bg-gray-50/50 text-xs font-semibold text-gray-500 uppercase tracking-wider border-b border-gray-100">
+                <tr>
+                  <th className="px-4 py-4 cursor-pointer hover:text-gray-900 group" onClick={() => toggleSort('firstName')}>
+                    <div className="flex items-center gap-2">Collaborateur <ArrowUpDown className="w-3.5 h-3.5 opacity-50" /></div>
+                  </th>
+                  <th className="px-4 py-4 cursor-pointer hover:text-gray-900 group" onClick={() => toggleSort('email')}>
+                    <div className="flex items-center gap-2">Contact <ArrowUpDown className="w-3.5 h-3.5 opacity-50" /></div>
+                  </th>
+                  <th className="px-4 py-4 cursor-pointer hover:text-gray-900 group" onClick={() => toggleSort('role')}>
+                    <div className="flex items-center gap-2">Rôle & Accès <ArrowUpDown className="w-3.5 h-3.5 opacity-50" /></div>
+                  </th>
+                  <th className="px-4 py-4 text-center cursor-pointer hover:text-gray-900 group" onClick={() => toggleSort('createdAt')}>
+                    <div className="flex items-center justify-center gap-2">Date d'ajout <ArrowUpDown className="w-3.5 h-3.5 opacity-50" /></div>
+                  </th>
+                  <th className="px-4 py-4 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {sortedEmployees.map(emp => (
                 <tr key={emp.id} className="hover:bg-gray-50/50 transition-colors group">
                   <td className="px-4 py-4">
                     <div className="flex items-center gap-3">

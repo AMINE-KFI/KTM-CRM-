@@ -51,9 +51,9 @@ router.post('/', async (req, res) => {
       for (const item of items) {
         const itemId = item.id || crypto.randomUUID();
         await connection.query(
-          `INSERT INTO document_items (id, document_id, product_id, quantity, unit_price, vat_rate, discount)
-           VALUES (?, ?, ?, ?, ?, ?, ?)`,
-          [itemId, id, item.product_id || item.productId, item.quantity, item.unit_price || item.unitPrice, item.vat_rate || item.vatRate || 19, item.discount || 0]
+          `INSERT INTO document_items (id, document_id, product_id, description, quantity, unit_price, vat_rate, discount)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          [itemId, id, item.product_id || item.productId || null, item.description || item.name || null, item.quantity, item.unit_price || item.unitPrice, item.vat_rate || item.vatRate || 19, item.discount || 0]
         );
       }
     }
@@ -94,9 +94,9 @@ router.put('/:id', async (req, res) => {
       for (const item of items) {
         const itemId = item.id || crypto.randomUUID();
         await connection.query(
-          `INSERT INTO document_items (id, document_id, product_id, quantity, unit_price, vat_rate, discount)
-           VALUES (?, ?, ?, ?, ?, ?, ?)`,
-          [itemId, docId, item.product_id || item.productId, item.quantity, item.unit_price || item.unitPrice, item.vat_rate || item.vatRate || 19, item.discount || 0]
+          `INSERT INTO document_items (id, document_id, product_id, description, quantity, unit_price, vat_rate, discount)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          [itemId, docId, item.product_id || item.productId || null, item.description || item.name || null, item.quantity, item.unit_price || item.unitPrice, item.vat_rate || item.vatRate || 19, item.discount || 0]
         );
       }
     }

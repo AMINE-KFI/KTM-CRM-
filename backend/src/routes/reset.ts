@@ -12,13 +12,12 @@ router.post('/', async (req, res) => {
     await connection.query('SET FOREIGN_KEY_CHECKS = 0');
 
     // Delete all data from tables
-    await connection.query('TRUNCATE TABLE document_items');
-    await connection.query('TRUNCATE TABLE payments');
-    await connection.query('TRUNCATE TABLE documents');
-    await connection.query('TRUNCATE TABLE expenses');
-    await connection.query('TRUNCATE TABLE contacts');
-    await connection.query('TRUNCATE TABLE products');
-    await connection.query('TRUNCATE TABLE companies');
+    await connection.query('DELETE FROM document_items');
+    await connection.query('DELETE FROM payments');
+    await connection.query('DELETE FROM documents');
+    await connection.query('DELETE FROM expenses');
+    await connection.query('DELETE FROM products');
+    await connection.query('DELETE FROM companies');
 
     // Re-enable foreign key checks
     await connection.query('SET FOREIGN_KEY_CHECKS = 1');

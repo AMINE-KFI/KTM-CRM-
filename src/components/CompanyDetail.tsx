@@ -16,6 +16,8 @@ import DealForm from './DealForm';
 import ErrorBoundary from './ErrorBoundary';
 import PaymentModal from './PaymentModal';
 import { generateDocumentPDF } from '@/lib/pdf';
+import type { PrintOptions } from '@/lib/pdf';
+import { PrintOptionsModal } from './PrintOptionsModal';
 import { saveCompanyFile, getCompanyFiles, deleteCompanyFile } from '@/lib/fileStorage';
 import type { BusinessDocument } from '@/types';
 
@@ -36,6 +38,7 @@ export default function CompanyDetail({ companyId, onBack }: CompanyDetailProps)
   const [showDocBuilder, setShowDocBuilder] = useState(false);
   const [docType, setDocType] = useState<'invoice'|'proforma'|'delivery_note'|'purchase_order'>('invoice');
   const [editDocument, setEditDocument] = useState<BusinessDocument | null>(null);
+  const [printDoc, setPrintDoc] = useState<BusinessDocument | null>(null);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [files, setFiles] = useState<any[]>([]);
   const [isUploading, setIsUploading] = useState(false);
@@ -48,9 +51,14 @@ export default function CompanyDetail({ companyId, onBack }: CompanyDetailProps)
   }, [companyId]);
 
   const handlePrint = (doc: BusinessDocument) => {
-    const fs = data.fiscalSettings && doc.tenant ? data.fiscalSettings[doc.tenant] : undefined;
+    setPrintDoc(doc);
+  };
+
+  const handlePrintConfirm = (options: PrintOptions) => {
+    if (!printDoc) return;
+    const fs = data.fiscalSettings && printDoc.tenant ? data.fiscalSettings[printDoc.tenant] : undefined;
     if (company) {
-      generateDocumentPDF(doc, company as any, fs);
+      generateDocumentPDF(printDoc, company as any, fs, 0, false, options);
     } else {
       alert("Erreur: Entité introuvable");
     }
@@ -794,6 +802,12 @@ export default function CompanyDetail({ companyId, onBack }: CompanyDetailProps)
         </ErrorBoundary>
       )}
       {showPaymentModal && <PaymentModal onClose={() => setShowPaymentModal(false)} companyId={company.id} />}
+
+      <PrintOptionsModal 
+        isOpen={!!printDoc} 
+        onClose={() => setPrintDoc(null)} 
+        onConfirm={handlePrintConfirm} 
+      />
     </div>
   );
 }

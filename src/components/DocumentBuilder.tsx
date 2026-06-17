@@ -7,7 +7,9 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ArrowLeft, Plus, Trash2, Printer, CreditCard } from 'lucide-react';
+import { PrintOptionsModal } from './PrintOptionsModal';
 import { generateDocumentPDF } from '@/lib/pdf';
+import type { PrintOptions } from '@/lib/pdf';
 import type { DocumentType, DocumentItem, BusinessDocument } from '@/types';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 
@@ -21,10 +23,12 @@ interface DocumentBuilderProps {
 }
 
 export default function DocumentBuilder({ onClose, defaultType = 'invoice', defaultCompanyId = '', initialData, sourceData, onConvert }: DocumentBuilderProps) {
-  const { data, addDocument, updateDocument, currentTenant, getCompany } = useCRM();
+  const { data, addDocument, updateDocument, tenant: globalTenant, currentUser, addActivityLog } = useCRM();
   
   const isReadOnly = initialData && initialData.status !== 'draft';
 
+  const [tenant, setTenant] = useState<TenantType>(initialData?.tenant || globalTenant || 'katamine');
+  const [isPrintOptionsOpen, setIsPrintOptionsOpen] = useState(false);
   const [type, setType] = useState<DocumentType>(initialData?.type || defaultType);
   const isPurchase = type === 'purchase_order' || type === 'supplier_invoice' || type === 'receipt_note';
   const [companyId, setCompanyId] = useState(initialData?.companyId || sourceData?.companyId || defaultCompanyId);
@@ -81,8 +85,8 @@ export default function DocumentBuilder({ onClose, defaultType = 'invoice', defa
         const product = data.products.find(p => p.id === value);
         if (product) {
           updated.name = product.name;
-          const price = currentTenant && product.prices && product.prices[currentTenant] 
-            ? product.prices[currentTenant] 
+          const price = tenant && product.prices && product.prices[tenant] 
+            ? product.prices[tenant] 
             : product.price;
           updated.unitPrice = isPurchase && product.purchasePrice !== undefined ? product.purchasePrice : price;
         }
@@ -110,7 +114,7 @@ export default function DocumentBuilder({ onClose, defaultType = 'invoice', defa
     const docData = {
       type,
       companyId,
-      tenant: initialData?.tenant || currentTenant || 'katamine',
+      tenant: tenant,
       items,
       subtotal: subTotal,
       vatAmount: taxAmount,
@@ -128,8 +132,26 @@ export default function DocumentBuilder({ onClose, defaultType = 'invoice', defa
 
     if (initialData) {
       updateDocument(initialData.id, docData as any);
+      if (initialData.status !== 'validated' && targetStatus === 'validated' && currentUser) {
+        addActivityLog({
+          type: 'document_validated',
+          title: 'Document validé',
+          description: `${currentUser.firstName} a validé le document ${initialData.reference || 'sans référence'}`,
+          userId: currentUser.id,
+          tenant: globalTenant,
+        });
+      }
     } else {
-      addDocument(docData as any);
+      const newDoc = addDocument(docData as any);
+      if (targetStatus === 'validated' && currentUser) {
+        addActivityLog({
+          type: 'document_validated',
+          title: 'Document validé',
+          description: `${currentUser.firstName} a validé le document ${newDoc.reference || 'sans référence'}`,
+          userId: currentUser.id,
+          tenant: globalTenant,
+        });
+      }
     }
     
     onClose();
@@ -137,14 +159,19 @@ export default function DocumentBuilder({ onClose, defaultType = 'invoice', defa
 
   const handlePrint = () => {
     if (!initialData) return;
+    setIsPrintOptionsOpen(true);
+  };
+
+  const handlePrintConfirm = (options: PrintOptions) => {
+    if (!initialData) return;
     const entity = initialData.type === 'purchase_order' 
       ? data.companies.find(c => c.id === initialData.companyId && (c.role === 'supplier' || c.role === 'both'))
       : getCompany(initialData.companyId);
 
-    const fs = data.fiscalSettings && initialData.tenant ? data.fiscalSettings[initialData.tenant] : undefined;
+    const fs = data.fiscalSettings && tenant ? data.fiscalSettings[tenant] : undefined;
 
     if (entity) {
-      generateDocumentPDF(initialData, entity as any, fs, totalPaid);
+      generateDocumentPDF(initialData, entity as any, fs, totalPaid, false, options);
     }
   };
 
@@ -176,7 +203,7 @@ export default function DocumentBuilder({ onClose, defaultType = 'invoice', defa
           <div>
             <h2 className="text-xl font-bold text-gray-900">
               {isReadOnly ? 'Détails du document' : initialData ? 'Modifier le document' : 'Créer un document'} 
-              <span className="text-gray-400 text-base font-normal ml-2">({currentTenant === 'kltools' ? 'KL Tools' : 'Katamine'})</span>
+              <span className="text-gray-400 text-base font-normal ml-2">({tenant === 'kltools' ? 'KL Tools' : 'Katamine'})</span>
             </h2>
             {initialData && (
               <p className="text-sm font-medium mt-0.5 text-blue-600">Ref: {initialData.reference}</p>
@@ -434,6 +461,12 @@ export default function DocumentBuilder({ onClose, defaultType = 'invoice', defa
           suggestedAmount={balanceDue > 0 ? balanceDue : undefined}
         />
       )}
+
+      <PrintOptionsModal 
+        isOpen={isPrintOptionsOpen} 
+        onClose={() => setIsPrintOptionsOpen(false)} 
+        onConfirm={handlePrintConfirm} 
+      />
     </div>
   );
 }

@@ -29,7 +29,7 @@ export default function PaymentModal({ onClose, defaultCompanyId, defaultDocumen
 
   // Filter out documents to allow linking to validated/partially_paid invoices
   const companyDocuments = (data.documents || []).filter(
-    d => d.companyId === companyId && d.type === 'invoice' && (d.status === 'validated' || d.status === 'partially_paid')
+    d => d.companyId === companyId && d.type === 'invoice' && (d.status === 'validated' || d.status === 'partially_paid' || d.status === 'overdue')
   );
 
   const selectedDocsInfo = companyDocuments.filter(d => selectedDocuments.includes(d.id));
@@ -126,9 +126,11 @@ export default function PaymentModal({ onClose, defaultCompanyId, defaultDocumen
                 <SelectValue placeholder="Sélectionner une entreprise..." />
               </SelectTrigger>
               <SelectContent>
-                {data.companies.map(c => (
-                  <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                ))}
+                {data.companies
+                  .filter(c => c.role !== 'supplier')
+                  .map(c => (
+                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                  ))}
               </SelectContent>
             </Select>
           </div>

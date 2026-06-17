@@ -124,7 +124,7 @@ export interface Note {
 
 export interface ActivityLog {
   id: string;
-  type: 'task_completed' | 'deal_moved';
+  type: 'task_completed' | 'deal_moved' | 'document_validated' | 'document_unvalidated' | string;
   title: string;
   description: string;
   userId: string;

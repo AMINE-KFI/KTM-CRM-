@@ -4,7 +4,7 @@ import { formatCurrency, formatDate } from '@/lib/storage';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Package, Plus, Search, MoreVertical, Edit2, Upload, Download, FileSpreadsheet, ChevronRight, FileText, Filter, TrendingUp, Layers } from 'lucide-react';
+import { Package, Plus, Search, MoreVertical, Edit2, Upload, Download, FileSpreadsheet, ChevronRight, FileText, Filter, TrendingUp, Layers, ArrowUpDown } from 'lucide-react';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator
 } from '@/components/ui/dropdown-menu';
@@ -19,6 +19,7 @@ export default function Products() {
   const [search, setSearch] = useState('');
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | undefined>(undefined);
+  const [sortConfig, setSortConfig] = useState<{ key: keyof Product | 'stock' | 'price'; direction: 'asc' | 'desc' } | null>({ key: 'createdAt', direction: 'desc' });
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleImportExcel = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -41,10 +42,42 @@ export default function Products() {
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
   
-  const filtered = (data.products || []).filter(p => 
-    p.name.toLowerCase().includes(search.toLowerCase()) || 
-    (p.description && p.description.toLowerCase().includes(search.toLowerCase()))
-  ).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  const filtered = useMemo(() => {
+    let result = (data.products || []).filter(p => 
+      p.name.toLowerCase().includes(search.toLowerCase()) || 
+      (p.description && p.description.toLowerCase().includes(search.toLowerCase()))
+    );
+
+    if (sortConfig) {
+      result.sort((a, b) => {
+        let aVal: any = a[sortConfig.key as keyof Product] || '';
+        let bVal: any = b[sortConfig.key as keyof Product] || '';
+        
+        if (sortConfig.key === 'stock') {
+          aVal = currentTenant && a.stock ? (a.stock[currentTenant] || 0) : 0;
+          bVal = currentTenant && b.stock ? (b.stock[currentTenant] || 0) : 0;
+        } else if (sortConfig.key === 'price') {
+          aVal = currentTenant && a.prices && a.prices[currentTenant] !== undefined ? a.prices[currentTenant] : a.price;
+          bVal = currentTenant && b.prices && b.prices[currentTenant] !== undefined ? b.prices[currentTenant] : b.price;
+        }
+
+        if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
+        if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
+        return 0;
+      });
+    } else {
+      result.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    }
+    
+    return result;
+  }, [data.products, search, sortConfig, currentTenant]);
+
+  const toggleSort = (key: keyof Product | 'stock' | 'price') => {
+    setSortConfig(prev => ({
+      key,
+      direction: prev?.key === key && prev.direction === 'desc' ? 'asc' : 'desc'
+    }));
+  };
 
   const kpis = useMemo(() => {
     const products = data.products || [];
@@ -180,11 +213,21 @@ export default function Products() {
             <table className="w-full text-sm text-left">
               <thead className="bg-gray-50/50 text-xs font-semibold text-gray-500 uppercase tracking-wider border-b border-gray-100">
                 <tr>
-                  <th className="px-4 py-4">Produit</th>
-                  <th className="px-4 py-4">Date d'ajout</th>
-                  <th className="px-4 py-4">TVA</th>
-                  <th className="px-4 py-4 text-center">Stock</th>
-                  <th className="px-4 py-4 text-right">Prix HT</th>
+                  <th className="px-4 py-4 cursor-pointer hover:text-gray-900 group" onClick={() => toggleSort('name')}>
+                    <div className="flex items-center gap-2">Produit <ArrowUpDown className="w-3.5 h-3.5 opacity-50" /></div>
+                  </th>
+                  <th className="px-4 py-4 cursor-pointer hover:text-gray-900 group" onClick={() => toggleSort('createdAt')}>
+                    <div className="flex items-center gap-2">Date d'ajout <ArrowUpDown className="w-3.5 h-3.5 opacity-50" /></div>
+                  </th>
+                  <th className="px-4 py-4 cursor-pointer hover:text-gray-900 group" onClick={() => toggleSort('vatRate')}>
+                    <div className="flex items-center gap-2">TVA <ArrowUpDown className="w-3.5 h-3.5 opacity-50" /></div>
+                  </th>
+                  <th className="px-4 py-4 text-center cursor-pointer hover:text-gray-900 group" onClick={() => toggleSort('stock')}>
+                    <div className="flex items-center justify-center gap-2">Stock <ArrowUpDown className="w-3.5 h-3.5 opacity-50" /></div>
+                  </th>
+                  <th className="px-4 py-4 text-right cursor-pointer hover:text-gray-900 group" onClick={() => toggleSort('price')}>
+                    <div className="flex items-center justify-end gap-2"><ArrowUpDown className="w-3.5 h-3.5 opacity-50" /> Prix HT</div>
+                  </th>
                   <th className="px-4 py-4 text-right">Actions</th>
                 </tr>
               </thead>

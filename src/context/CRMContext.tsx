@@ -59,6 +59,7 @@ interface CRMContextType {
   deleteNote: (id: string) => void;
   
   // Activities
+  addActivityLog: (log: Omit<ActivityLog, 'id' | 'createdAt'>) => void;
   // Stock
   addStockMovement: (movement: Omit<StockMovement, 'id' | 'createdAt'>) => StockMovement;
   // Settings
@@ -92,13 +93,19 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
         const token = localStorage.getItem('token');
         if (!token) return;
 
-        const [companies, products, documents, expenses, payments] = await Promise.all([
+        const [companiesRes, productsRes, documentsRes, expensesRes, paymentsRes] = await Promise.allSettled([
           api.getCompanies(),
           api.getProducts(),
           api.getDocuments(),
           api.getExpenses(),
           api.getPayments()
         ]);
+
+        const companies = companiesRes.status === 'fulfilled' ? companiesRes.value : [];
+        const products = productsRes.status === 'fulfilled' ? productsRes.value : [];
+        const documents = documentsRes.status === 'fulfilled' ? documentsRes.value : [];
+        const expenses = expensesRes.status === 'fulfilled' ? expensesRes.value : [];
+        const payments = paymentsRes.status === 'fulfilled' ? paymentsRes.value : [];
 
         // Auto-heal document statuses based on payments (fixes legacy data)
         let healedDocuments = [...documents];
@@ -146,10 +153,10 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
     fetchData();
   }, [data.currentUser]); // Re-fetch quand l'utilisateur change
 
-  // On désactive saveData(data) pour ne plus écraser le localStorage avec toutes les données
-  // useEffect(() => {
-  //   saveData(data);
-  // }, [data]);
+  // Sauvegarde dans le localStorage (pour les logs, employés, configs)
+  useEffect(() => {
+    saveData(data);
+  }, [data]);
 
   const addCompany = useCallback((company: Omit<Company, 'id' | 'createdAt' | 'contacts'>): Company => {
     const newCompany: Company = {
@@ -163,17 +170,27 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
     setData(prev => ({ ...prev, companies: [...prev.companies, newCompany] }));
     
     // Envoi à l'API
-    api.addCompany(newCompany).catch(err => console.error("API Error:", err));
+    api.addCompany(newCompany).catch(err => {
+      alert("Erreur lors de la création de l'entreprise: " + err.message);
+      // Rollback
+      setData(prev => ({
+        ...prev,
+        companies: prev.companies.filter(c => c.id !== newCompany.id)
+      }));
+    });
     
     return newCompany;
   }, []);
 
   const updateCompany = useCallback((id: string, updates: Partial<Company>) => {
-    setData(prev => ({
-      ...prev,
-      companies: prev.companies.map(c => c.id === id ? { ...c, ...updates } : c),
-    }));
-    api.updateCompany(id, updates).catch(err => console.error("API Error:", err));
+    setData(prev => {
+      const newCompanies = prev.companies.map(c => c.id === id ? { ...c, ...updates } : c);
+      const fullEntity = newCompanies.find(c => c.id === id);
+      if (fullEntity) {
+        api.updateCompany(id, fullEntity).catch(err => alert("Erreur lors de la modification de l'entreprise: " + err.message));
+      }
+      return { ...prev, companies: newCompanies };
+    });
   }, []);
 
   const deleteCompany = useCallback((id: string) => {
@@ -295,14 +312,28 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
 
   const addProduct = useCallback((product: Omit<Product, 'id' | 'createdAt'>): Product => {
     const newProduct: Product = { ...product, id: generateId(), createdAt: new Date().toISOString() };
-    setData(prev => ({ ...prev, products: [...(prev.products || []), newProduct] }));
-    api.addProduct(newProduct).catch(err => alert("Erreur Serveur: " + err.message));
+    setData(prev => ({ ...prev, products: [...prev.products, newProduct] }));
+    
+    api.addProduct(newProduct).catch(err => {
+      alert("Erreur lors de la création du produit: " + err.message);
+      setData(prev => ({
+        ...prev,
+        products: prev.products.filter(p => p.id !== newProduct.id)
+      }));
+    });
+    
     return newProduct;
   }, []);
 
   const updateProduct = useCallback((id: string, updates: Partial<Product>) => {
-    setData(prev => ({ ...prev, products: (prev.products || []).map(p => p.id === id ? { ...p, ...updates } : p) }));
-    api.updateProduct(id, updates).catch(err => alert("Erreur Serveur: " + err.message));
+    setData(prev => {
+      const newProducts = prev.products.map(p => p.id === id ? { ...p, ...updates } : p);
+      const fullEntity = newProducts.find(p => p.id === id);
+      if (fullEntity) {
+        api.updateProduct(id, fullEntity).catch(err => alert("Erreur Serveur: " + err.message));
+      }
+      return { ...prev, products: newProducts };
+    });
   }, []);
 
   const deleteProduct = useCallback((id: string) => {
@@ -517,17 +548,22 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
         products: updatedProducts
       };
     });
+    setTimeout(() => {
+      if (newMov) api.addStockMovement(newMov).catch(err => alert("Erreur Serveur: " + err.message));
+    }, 0);
     return newMov || ({} as StockMovement);
   }, []);
 
   const addDocument = useCallback((doc: Omit<BusinessDocument, 'id' | 'createdAt' | 'reference'>): BusinessDocument => {
-    let newDoc: BusinessDocument | null = null;
+    const newDoc = { ...doc, id: generateId(), createdAt: new Date().toISOString() } as BusinessDocument;
+    
     setData(prev => {
       const tenant = prev.currentTenant || doc.tenant;
+      newDoc.tenant = tenant;
       const t = tenant === 'katamine' ? 'KTM' : 'KLT';
       const year = new Date().getFullYear();
       
-      let reference = `BROUILLON-${generateId().slice(0, 5)}`;
+      let reference = `BROUILLON-${newDoc.id.slice(0, 5)}`;
       let nextCounter = null;
       let counterKey = '';
 
@@ -547,14 +583,8 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
         reference = `${prefix}${nextCounter.toString().padStart(4, '0')}`;
       }
       
-      newDoc = { 
-        ...doc, 
-        id: generateId(), 
-        reference,
-        createdAt: new Date().toISOString(), 
-        tenant,
-        fiscalYear: prev.currentYearId || new Date().getFullYear().toString()
-      };
+      newDoc.reference = reference;
+      newDoc.fiscalYear = prev.currentYearId || new Date().getFullYear().toString();
 
       let newMovements = [...(prev.stockMovements || [])];
       let updatedProducts = [...(prev.products || [])];
@@ -593,10 +623,12 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
         products: updatedProducts
       };
     });
-    if (newDoc) {
+    
+    setTimeout(() => {
       api.addDocument(newDoc).catch(err => alert("Erreur Serveur: " + err.message));
-    }
-    return newDoc || ({} as BusinessDocument);
+    }, 0);
+    
+    return newDoc;
   }, []);
 
   const updateDocument = useCallback((id: string, updates: Partial<BusinessDocument>) => {
@@ -618,17 +650,21 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
       let updatedProducts = [...(prev.products || [])];
       let newCounters = { ...(prev.documentCounters || {}) };
 
-      // Transition Draft -> Validated
       if (oldDoc.status === 'draft' && newDoc.status === 'validated') {
         const t = newDoc.tenant === 'katamine' ? 'KTM' : 'KLT';
         const year = new Date(newDoc.date || Date.now()).getFullYear();
         const typePrefix = newDoc.type === 'invoice' ? 'FAC' : newDoc.type === 'proforma' ? 'PRO' : newDoc.type === 'delivery_note' ? 'BL' : 'BC';
-        const counterKey = `${typePrefix}_${t}_${year}`;
-        const currentCounter = newCounters[counterKey] || 0;
-        const nextCounter = currentCounter + 1;
+        const prefix = `${typePrefix}-${t}-${year}-`;
         
-        newDoc.reference = `${typePrefix}-${t}-${year}-${nextCounter.toString().padStart(4, '0')}`;
-        newCounters[counterKey] = nextCounter;
+        const existingDocs = docs.filter(d => d.reference && d.reference.startsWith(prefix));
+        const maxCounter = existingDocs.reduce((max, d) => {
+          const parts = d.reference!.split('-');
+          const num = parseInt(parts[parts.length - 1], 10);
+          return !isNaN(num) && num > max ? num : max;
+        }, 0);
+        
+        const nextCounter = maxCounter + 1;
+        newDoc.reference = `${prefix}${nextCounter.toString().padStart(4, '0')}`;
 
         if (newDoc.type === 'invoice' || newDoc.type === 'delivery_note') {
           newDoc.items.forEach(item => {
@@ -680,15 +716,17 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
         });
       }
 
+      const newDocs = docs.map(d => d.id === id ? newDoc : d);
+      api.updateDocument(id, newDoc).catch(err => alert("Erreur Serveur: " + err.message));
+      
       return { 
         ...prev, 
-        documents: docs.map(d => d.id === id ? newDoc : d),
+        documents: newDocs,
         documentCounters: newCounters,
         stockMovements: newMovements,
         products: updatedProducts
       };
     });
-    api.updateDocument(id, updates).catch(err => alert("Erreur Serveur: " + err.message));
   }, []);
 
   const deleteDocument = useCallback((id: string) => {
@@ -701,49 +739,50 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
       }
       return { ...prev, documents: docs.filter(d => d.id !== id) };
     });
-    api.deleteDocument(id).catch(err => alert("Erreur Serveur: " + err.message));
+    setTimeout(() => {
+      api.deleteDocument(id).catch(err => alert("Erreur Serveur: " + err.message));
+    }, 0);
   }, []);
 
   const addPayment = useCallback((payment: Omit<Payment, 'id'>): Payment => {
-    let newPayment: Payment | null = null;
+    const newPayment = { ...payment, id: generateId() } as Payment;
+    
     setData(prev => {
-      newPayment = { ...payment, id: generateId(), tenant: prev.currentTenant || payment.tenant, fiscalYear: prev.currentYearId || new Date().getFullYear().toString() };
+      newPayment.tenant = prev.currentTenant || payment.tenant;
+      newPayment.fiscalYear = prev.currentYearId || new Date().getFullYear().toString();
+      
       const newPaymentsList = [...(prev.payments || []), newPayment];
       let newDocs = [...(prev.documents || [])];
 
       // Auto update document status to paid or partially_paid if total paid >= total amount
       if (newPayment.documentId) {
-        const doc = newDocs.find(d => d.id === newPayment!.documentId);
-        if (doc && doc.status !== 'paid' && doc.status !== 'cancelled') {
-          const totalPaidForDoc = newPaymentsList
-            .filter(p => p.documentId === doc.id)
-            .reduce((sum, p) => sum + p.amount, 0);
-            
-          let newStatus = doc.status;
-          if (totalPaidForDoc >= doc.totalAmount) {
-            newStatus = 'paid';
-          } else if (totalPaidForDoc > 0) {
-            newStatus = 'partially_paid';
-          }
-          
-          if (newStatus !== doc.status) {
-            const updatedDoc = { ...doc, status: newStatus };
+        const doc = newDocs.find(d => d.id === newPayment.documentId);
+        if (doc) {
+          const totalPaid = newPaymentsList.filter(p => p.documentId === doc.id).reduce((sum, p) => sum + p.amount, 0);
+          if (totalPaid >= doc.totalAmount) {
+            const updatedDoc = { ...doc, status: 'paid' as const };
             newDocs = newDocs.map(d => d.id === doc.id ? updatedDoc : d);
-            api.updateDocument(doc.id, updatedDoc).catch(err => console.error("Failed to update doc status:", err));
+            setTimeout(() => {
+              api.updateDocument(doc.id, updatedDoc).catch(err => console.error("Failed to update doc status:", err));
+            }, 0);
+          } else if (totalPaid > 0) {
+            const updatedDoc = { ...doc, status: 'partially_paid' as const };
+            newDocs = newDocs.map(d => d.id === doc.id ? updatedDoc : d);
+            setTimeout(() => {
+              api.updateDocument(doc.id, updatedDoc).catch(err => console.error("Failed to update doc status:", err));
+            }, 0);
           }
         }
       }
 
-      return { 
-        ...prev, 
-        payments: newPaymentsList,
-        documents: newDocs
-      };
+      return { ...prev, payments: newPaymentsList, documents: newDocs };
     });
-    if (newPayment) {
+    
+    setTimeout(() => {
       api.addPayment(newPayment).catch(err => alert("Erreur Serveur: " + err.message));
-    }
-    return newPayment || ({} as Payment);
+    }, 0);
+    
+    return newPayment;
   }, []);
 
   const getClientSituation = useCallback((companyId: string) => {
@@ -795,27 +834,33 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
   }, [data.documents, data.payments, data.currentTenant]);
 
   const addExpense = useCallback((expense: Omit<Expense, 'id' | 'createdAt'>): Expense => {
-    let newExpense: Expense | null = null;
+    const newExpense = {
+      ...expense,
+      id: generateId(),
+      createdAt: new Date().toISOString()
+    } as Expense;
+    
     setData(prev => {
-      newExpense = {
-        ...expense,
-        id: generateId(),
-        createdAt: new Date().toISOString()
-      };
+      newExpense.tenant = prev.currentTenant || undefined;
       return { ...prev, expenses: [...(prev.expenses || []), newExpense] };
     });
-    if (newExpense) {
+    
+    setTimeout(() => {
       api.addExpense(newExpense).catch(err => alert("Erreur Serveur: " + err.message));
-    }
-    return newExpense!;
+    }, 0);
+    
+    return newExpense;
   }, []);
 
   const updateExpense = useCallback((id: string, updates: Partial<Expense>) => {
-    setData(prev => ({
-      ...prev,
-      expenses: (prev.expenses || []).map(e => e.id === id ? { ...e, ...updates } : e)
-    }));
-    api.updateExpense(id, updates).catch(err => alert("Erreur Serveur: " + err.message));
+    setData(prev => {
+      const newExpenses = (prev.expenses || []).map(e => e.id === id ? { ...e, ...updates } : e);
+      const fullEntity = newExpenses.find(e => e.id === id);
+      if (fullEntity) {
+        api.updateExpense(id, fullEntity).catch(err => alert("Erreur Serveur: " + err.message));
+      }
+      return { ...prev, expenses: newExpenses };
+    });
   }, []);
 
   const deleteExpense = useCallback((id: string) => {

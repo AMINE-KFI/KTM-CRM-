@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { Plus, Search, Trash2, Edit, CreditCard, Filter, TrendingDown } from 'lucide-react';
+import { Plus, Search, Trash2, Edit, CreditCard, Filter, TrendingDown, ArrowUpDown } from 'lucide-react';
 import type { Expense } from '@/types';
 
 export default function Expenses() {
@@ -17,6 +17,7 @@ export default function Expenses() {
   
   const [showForm, setShowForm] = useState(false);
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
+  const [sortConfig, setSortConfig] = useState<{ key: keyof Expense; direction: 'asc' | 'desc' } | null>({ key: 'date', direction: 'desc' });
   
   const [formData, setFormData] = useState<Partial<Expense>>({
     date: new Date().toISOString().split('T')[0],
@@ -40,12 +41,33 @@ export default function Expenses() {
   const expenses = data.expenses || [];
 
   const filteredExpenses = useMemo(() => {
-    return expenses.filter(exp => {
+    const filtered = expenses.filter(exp => {
       const searchMatch = exp.description.toLowerCase().includes(searchTerm.toLowerCase());
       const categoryMatch = filterCategory === 'all' || exp.category === filterCategory;
       return searchMatch && categoryMatch;
-    }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [expenses, searchTerm, filterCategory]);
+    });
+
+    if (sortConfig) {
+      filtered.sort((a, b) => {
+        const aVal = a[sortConfig.key] || '';
+        const bVal = b[sortConfig.key] || '';
+        if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
+        if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
+        return 0;
+      });
+    } else {
+      filtered.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    }
+
+    return filtered;
+  }, [expenses, searchTerm, filterCategory, sortConfig]);
+
+  const toggleSort = (key: keyof Expense) => {
+    setSortConfig(prev => ({
+      key,
+      direction: prev?.key === key && prev.direction === 'desc' ? 'asc' : 'desc'
+    }));
+  };
 
   const totalExpenses = useMemo(() => {
     return filteredExpenses.reduce((sum, exp) => sum + exp.amount, 0);
@@ -226,11 +248,21 @@ export default function Expenses() {
             <table className="w-full text-sm text-left">
               <thead className="bg-gray-50/50 text-xs font-semibold text-gray-500 uppercase tracking-wider border-b border-gray-100">
                 <tr>
-                  <th className="px-4 py-4 whitespace-nowrap">Date</th>
-                  <th className="px-4 py-4">Description</th>
-                  <th className="px-4 py-4">Catégorie</th>
-                  <th className="px-4 py-4 text-right">Montant</th>
-                  <th className="px-4 py-4 text-center">Méthode</th>
+                  <th className="px-4 py-4 whitespace-nowrap cursor-pointer hover:text-gray-900 group" onClick={() => toggleSort('date')}>
+                    <div className="flex items-center gap-2">Date <ArrowUpDown className="w-3.5 h-3.5 opacity-50" /></div>
+                  </th>
+                  <th className="px-4 py-4 cursor-pointer hover:text-gray-900 group" onClick={() => toggleSort('description')}>
+                    <div className="flex items-center gap-2">Description <ArrowUpDown className="w-3.5 h-3.5 opacity-50" /></div>
+                  </th>
+                  <th className="px-4 py-4 cursor-pointer hover:text-gray-900 group" onClick={() => toggleSort('category')}>
+                    <div className="flex items-center gap-2">Catégorie <ArrowUpDown className="w-3.5 h-3.5 opacity-50" /></div>
+                  </th>
+                  <th className="px-4 py-4 text-right cursor-pointer hover:text-gray-900 group" onClick={() => toggleSort('amount')}>
+                    <div className="flex items-center justify-end gap-2"><ArrowUpDown className="w-3.5 h-3.5 opacity-50" /> Montant</div>
+                  </th>
+                  <th className="px-4 py-4 text-center cursor-pointer hover:text-gray-900 group" onClick={() => toggleSort('paymentMethod')}>
+                    <div className="flex items-center justify-center gap-2">Méthode <ArrowUpDown className="w-3.5 h-3.5 opacity-50" /></div>
+                  </th>
                   <th className="px-4 py-4 text-right">Actions</th>
                 </tr>
               </thead>

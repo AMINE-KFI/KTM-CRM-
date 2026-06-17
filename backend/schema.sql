@@ -61,7 +61,8 @@ CREATE TABLE IF NOT EXISTS `documents` (
 CREATE TABLE IF NOT EXISTS `document_items` (
   `id` VARCHAR(50) PRIMARY KEY,
   `document_id` VARCHAR(50) NOT NULL,
-  `product_id` VARCHAR(50) NOT NULL,
+  `product_id` VARCHAR(50) NULL,
+  `description` VARCHAR(255) NULL,
   `quantity` INT NOT NULL,
   `unit_price` DECIMAL(15, 2) NOT NULL,
   `vat_rate` DECIMAL(5, 2) NOT NULL,
