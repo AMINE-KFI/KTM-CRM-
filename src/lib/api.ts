@@ -13,15 +13,30 @@ const getHeaders = () => {
 };
 
 export const api = {
+  // Stats
+  getStats: async (tenant?: string) => {
+    const tenantParam = tenant ? `?tenant=${tenant}` : '';
+    const res = await fetch(`${API_URL}/stats${tenantParam}`, { headers: getHeaders() });
+    if (!res.ok) throw new Error('Erreur récupération statistiques');
+    return res.json();
+  },
+
   // Companies
-  getCompanies: async (): Promise<Company[]> => {
-    const res = await fetch(`${API_URL}/companies`, { headers: getHeaders() });
+  getCompanies: async (page = 1, limit = 50): Promise<{ data: Company[], total: number, page: number, limit: number }> => {
+    const res = await fetch(`${API_URL}/companies?page=${page}&limit=${limit}`, { headers: getHeaders() });
     if (!res.ok) throw new Error('Erreur récupération clients');
-    const data = await res.json();
-    return data.map((c: any) => ({
-      ...c,
-      contacts: typeof c.contacts === 'string' ? JSON.parse(c.contacts) : (c.contacts || [])
-    }));
+    const json = await res.json();
+    const isArray = Array.isArray(json);
+    const data = isArray ? json : (json.data || []);
+    return {
+      data: data.map((c: any) => ({
+        ...c,
+        contacts: typeof c.contacts === 'string' ? JSON.parse(c.contacts) : (c.contacts || [])
+      })),
+      total: isArray ? data.length : (json.total || 0),
+      page,
+      limit
+    };
   },
   addCompany: async (company: any) => {
     const res = await fetch(`${API_URL}/companies`, {
@@ -44,14 +59,21 @@ export const api = {
   },
 
   // Products
-  getProducts: async (): Promise<Product[]> => {
-    const res = await fetch(`${API_URL}/products`, { headers: getHeaders() });
+  getProducts: async (page = 1, limit = 50): Promise<{ data: Product[], total: number, page: number, limit: number }> => {
+    const res = await fetch(`${API_URL}/products?page=${page}&limit=${limit}`, { headers: getHeaders() });
     if (!res.ok) throw new Error('Erreur récupération produits');
-    const data = await res.json();
-    return data.map((p: any) => ({
-      ...p,
-      prices: typeof p.prices === 'string' ? JSON.parse(p.prices) : (p.prices || [])
-    }));
+    const json = await res.json();
+    const isArray = Array.isArray(json);
+    const data = isArray ? json : (json.data || []);
+    return {
+      data: data.map((p: any) => ({
+        ...p,
+        prices: typeof p.prices === 'string' ? JSON.parse(p.prices) : (p.prices || [])
+      })),
+      total: isArray ? data.length : (json.total || 0),
+      page,
+      limit
+    };
   },
   addProduct: async (product: any) => {
     const res = await fetch(`${API_URL}/products`, {
@@ -74,30 +96,39 @@ export const api = {
   },
 
   // Documents
-  getDocuments: async (): Promise<BusinessDocument[]> => {
-    const res = await fetch(`${API_URL}/documents`, { headers: getHeaders() });
+  getDocuments: async (page = 1, limit = 50, tenant?: string): Promise<{ data: BusinessDocument[], total: number, page: number, limit: number }> => {
+    const tenantParam = tenant ? `&tenant=${tenant}` : '';
+    const res = await fetch(`${API_URL}/documents?page=${page}&limit=${limit}${tenantParam}`, { headers: getHeaders() });
     if (!res.ok) throw new Error('Erreur récupération documents');
-    const data = await res.json();
-    return data.map((d: any) => ({
-      ...d,
-      companyId: d.company_id || d.companyId,
-      dueDate: d.due_date || d.dueDate,
-      subtotal: Number(d.sub_total || d.subtotal || 0),
-      vatAmount: Number(d.tax_total || d.vatAmount || 0),
-      totalAmount: Number(d.total_amount || d.totalAmount || 0),
-      stampAmount: Number(d.stamp_amount || d.stampAmount || 0),
-      fiscalYear: d.fiscal_year || d.fiscalYear,
-      createdAt: d.created_at || d.createdAt,
-      items: (d.items || []).map((i: any) => ({
-        ...i,
-        productId: i.product_id || i.productId,
-        quantity: Number(i.quantity || 0),
-        unitPrice: Number(i.unit_price || i.unitPrice || 0),
-        vatRate: Number(i.vat_rate || i.vatRate || 0),
-        discount: Number(i.discount || 0),
-        total: Number(i.quantity || 0) * Number(i.unit_price || i.unitPrice || 0)
-      }))
-    }));
+    const json = await res.json();
+    const isArray = Array.isArray(json);
+    const data = isArray ? json : (json.data || []);
+    return {
+      data: data.map((d: any) => ({
+        ...d,
+        companyId: d.company_id || d.companyId,
+        dueDate: d.due_date || d.dueDate,
+        subtotal: Number(d.sub_total || d.subtotal || 0),
+        vatAmount: Number(d.tax_total || d.vatAmount || 0),
+        totalAmount: Number(d.total_amount || d.totalAmount || 0),
+        stampAmount: Number(d.stamp_amount || d.stampAmount || 0),
+        paymentMethod: d.payment_method || d.paymentMethod || 'À échéance',
+        fiscalYear: d.fiscal_year || d.fiscalYear,
+        createdAt: d.created_at || d.createdAt,
+        items: (d.items || []).map((i: any) => ({
+          ...i,
+          productId: i.product_id || i.productId,
+          quantity: Number(i.quantity || 0),
+          unitPrice: Number(i.unit_price || i.unitPrice || 0),
+          vatRate: Number(i.vat_rate || i.vatRate || 0),
+          discount: Number(i.discount || 0),
+          total: Number(i.quantity || 0) * Number(i.unit_price || i.unitPrice || 0)
+        }))
+      })),
+      total: isArray ? data.length : (json.total || 0),
+      page,
+      limit
+    };
   },
   addDocument: async (doc: any) => {
     const res = await fetch(`${API_URL}/documents`, {
@@ -128,17 +159,24 @@ export const api = {
   },
 
   // Expenses
-  getExpenses: async (): Promise<Expense[]> => {
-    const res = await fetch(`${API_URL}/expenses`, { headers: getHeaders() });
+  getExpenses: async (page = 1, limit = 50): Promise<{ data: Expense[], total: number, page: number, limit: number }> => {
+    const res = await fetch(`${API_URL}/expenses?page=${page}&limit=${limit}`, { headers: getHeaders() });
     if (!res.ok) throw new Error('Erreur récupération dépenses');
-    const data = await res.json();
-    return data.map((e: any) => ({
-      ...e,
-      amount: Number(e.amount || 0),
-      paymentMethod: e.payment_method || e.paymentMethod,
-      fiscalYear: e.fiscal_year || e.fiscalYear,
-      createdAt: e.created_at || e.createdAt
-    }));
+    const json = await res.json();
+    const isArray = Array.isArray(json);
+    const data = isArray ? json : (json.data || []);
+    return {
+      data: data.map((e: any) => ({
+        ...e,
+        amount: Number(e.amount || 0),
+        paymentMethod: e.payment_method || e.paymentMethod,
+        fiscalYear: e.fiscal_year || e.fiscalYear,
+        createdAt: e.created_at || e.createdAt
+      })),
+      total: isArray ? data.length : (json.total || 0),
+      page,
+      limit
+    };
   },
   addExpense: async (expense: any) => {
     const res = await fetch(`${API_URL}/expenses`, {
@@ -169,19 +207,26 @@ export const api = {
   },
 
   // Payments
-  getPayments: async (): Promise<Payment[]> => {
-    const res = await fetch(`${API_URL}/payments`, { headers: getHeaders() });
+  getPayments: async (page = 1, limit = 50): Promise<{ data: Payment[], total: number, page: number, limit: number }> => {
+    const res = await fetch(`${API_URL}/payments?page=${page}&limit=${limit}`, { headers: getHeaders() });
     if (!res.ok) throw new Error('Erreur récupération paiements');
-    const data = await res.json();
-    return data.map((p: any) => ({
-      ...p,
-      amount: Number(p.amount || 0),
-      documentId: p.document_id || p.documentId,
-      companyId: p.company_id || p.companyId,
-      fiscalYear: p.fiscal_year || p.fiscalYear,
-      createdAt: p.created_at || p.createdAt,
-      mode: p.method || p.mode
-    }));
+    const json = await res.json();
+    const isArray = Array.isArray(json);
+    const data = isArray ? json : (json.data || []);
+    return {
+      data: data.map((p: any) => ({
+        ...p,
+        amount: Number(p.amount || 0),
+        documentId: p.document_id || p.documentId,
+        companyId: p.company_id || p.companyId,
+        fiscalYear: p.fiscal_year || p.fiscalYear,
+        createdAt: p.created_at || p.createdAt,
+        mode: p.method || p.mode
+      })),
+      total: isArray ? data.length : (json.total || 0),
+      page,
+      limit
+    };
   },
   addPayment: async (payment: any) => {
     const res = await fetch(`${API_URL}/payments`, {

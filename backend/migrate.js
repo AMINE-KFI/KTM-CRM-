@@ -29,6 +29,15 @@ async function migrate() {
     console.log('Error adding description:', e.message);
   }
 
+  try {
+    await connection.query(`
+      ALTER TABLE documents ADD COLUMN payment_method VARCHAR(50) DEFAULT 'À échéance';
+    `);
+    console.log('payment_method column added');
+  } catch (e) {
+    console.log('Error adding payment_method:', e.message);
+  }
+
   console.log('Migration done.');
   process.exit(0);
 }

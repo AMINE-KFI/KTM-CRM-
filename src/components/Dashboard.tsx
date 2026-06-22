@@ -6,50 +6,63 @@ import { Button } from '@/components/ui/button';
 import {
   Building2, Users, FileText, AlertCircle,
   TrendingUp, TrendingDown, Clock, CheckCircle2,
-  AlertTriangle
+  AlertTriangle, Loader2, ArrowDownToLine, Package
 } from 'lucide-react';
-
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
+  PieChart, Pie, Cell, Legend
+} from 'recharts';
 
 interface DashboardProps {
   onNavigate: (page: string, id?: string) => void;
 }
 
 export default function Dashboard({ onNavigate }: DashboardProps) {
-  const { data, getTotalUnpaid, getTotalPaid, getOverdueInvoices } = useCRM();
+  const { data, tenant, getOverdueInvoices } = useCRM();
   
   const overdueInvoices = getOverdueInvoices();
-  const totalUnpaid = getTotalUnpaid();
-  const totalPaid = getTotalPaid();
   
-  const tenantDocs = useMemo(() => (data.documents || []).filter(d => !data.currentTenant || d.tenant === data.currentTenant), [data.documents, data.currentTenant]);
+  const stats = {
+    totalCompanies: data.companies.filter(c => c.role === 'client' || !c.role || c.role === 'both').length,
+    totalContacts: (data.companies || []).reduce((sum, c) => sum + (c.contacts || []).length, 0),
+    totalInvoices: (data.documents || []).filter(d => (!tenant || d.tenant === tenant) && d.type === 'invoice').length,
+    unpaidInvoices: (data.documents || []).filter(d => (!tenant || d.tenant === tenant) && d.type === 'invoice' && d.status !== 'paid').length,
+    pipelineValue: (data.deals || []).filter(d => d.stage !== 'lost' && d.stage !== 'won').reduce((sum, d) => sum + d.value, 0),
+    pendingQuotes: (data.documents || []).filter(d => (!tenant || d.tenant === tenant) && d.type === 'proforma' && (d.status === 'draft' || d.status === 'validated')).length
+  };
 
-  const stats = useMemo(() => {
-    const totalCompanies = data.companies.filter(c => c.role === 'client' || !c.role || c.role === 'both').length;
-    const totalContacts = (data.companies || []).reduce((sum, c) => sum + (c.contacts || []).length, 0);
-    const erpInvoices = tenantDocs.filter((d: any) => d.type === 'invoice');
-    const totalInvoices = erpInvoices.length;
-    const unpaidInvoices = erpInvoices.filter((i: any) => i.status !== 'paid').length;
-    const pipelineValue = (data.deals || []).filter(d => d.stage !== 'lost' && d.stage !== 'won').reduce((sum, d) => sum + d.value, 0);
-    const pendingQuotes = tenantDocs.filter((d: any) => d.type === 'proforma' && (d.status === 'draft' || d.status === 'validated')).length;
-    return { totalCompanies, totalContacts, totalInvoices, unpaidInvoices, pipelineValue, pendingQuotes };
-  }, [data, tenantDocs]);
+  const localInvoices = (data.documents || []).filter(d => (!tenant || d.tenant === tenant) && d.type === 'invoice' && d.status !== 'cancelled');
+  const localSupplierInvoices = (data.documents || []).filter(d => (!tenant || d.tenant === tenant) && d.type === 'supplier_invoice' && d.status !== 'cancelled');
+  const localTotalSales = localInvoices.reduce((sum, d) => sum + d.totalAmount, 0);
+  const localTotalPurchases = localSupplierInvoices.reduce((sum, d) => sum + d.totalAmount, 0);
+  const localTotalExpenses = (data.expenses || []).reduce((sum, e) => sum + e.amount, 0);
 
-  const financialStats = useMemo(() => {
-    const invoices = tenantDocs.filter((d: any) => d.type === 'invoice' && d.status !== 'cancelled');
-    const supplierInvoices = tenantDocs.filter((d: any) => d.type === 'supplier_invoice' && d.status !== 'cancelled');
-    
-    const totalSales = invoices.reduce((sum, d) => sum + d.totalAmount, 0);
-    const totalPurchases = supplierInvoices.reduce((sum, d) => sum + d.totalAmount, 0);
-    const totalExpenses = (data.expenses || []).reduce((sum, e) => sum + e.amount, 0);
-    
-    const netProfit = totalSales - totalPurchases - totalExpenses;
-    
-    return { totalSales, totalPurchases, totalExpenses, netProfit };
-  }, [data, tenantDocs]);
+  const encaissementsClients = (data.payments || []).filter(p => p.type === 'in' && (!tenant || p.tenant === tenant)).reduce((sum, p) => sum + p.amount, 0);
+  const paiementsFournisseurs = (data.payments || []).filter(p => p.type === 'out' && (!tenant || p.tenant === tenant)).reduce((sum, p) => sum + p.amount, 0);
+  
+  const creancesClients = localTotalSales - encaissementsClients;
+  const dettesFournisseurs = localTotalPurchases - paiementsFournisseurs;
+
+  let valeurStock = 0;
+  (data.products || []).forEach(p => {
+    const price = tenant && p.prices && p.prices[tenant] !== undefined ? p.prices[tenant] : p.price;
+    const stock = p.stockQuantity || 0;
+    valeurStock += price * stock;
+  });
+
+  const financialStats = {
+    totalSales: localTotalSales,
+    totalPurchases: localTotalPurchases,
+    totalExpenses: localTotalExpenses,
+    netProfit: localTotalSales - localTotalPurchases - localTotalExpenses
+  };
 
   const recentInvoices = useMemo(() => {
-    const erpInvoices = tenantDocs.filter((d: any) => d.type === 'invoice');
-    return [...erpInvoices]
+    const source = data.documents;
+    if (!source) return [];
+    
+    const erpInvoices = source.filter((d: any) => (!tenant || d.tenant === tenant) && d.type === 'invoice');
+    return erpInvoices
       .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
       .slice(0, 5)
       .map((inv: any) => ({
@@ -57,7 +70,14 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
         invoiceNumber: inv.reference,
         company: data.companies.find((c: any) => c.id === inv.companyId),
       }));
-  }, [data]);
+  }, [data.documents, data.companies, tenant]);
+
+  // Chart data
+  const pieData = [
+    { name: 'Achats', value: financialStats.totalPurchases, color: '#3b82f6' },
+    { name: 'Dépenses', value: financialStats.totalExpenses, color: '#f97316' },
+    { name: 'Marge', value: Math.max(0, financialStats.netProfit), color: '#10b981' },
+  ];
 
   return (
     <div className="space-y-6">
@@ -113,6 +133,41 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
         />
       </div>
 
+      {/* Trésorerie & Stocks */}
+      <div>
+        <h2 className="text-lg font-semibold text-gray-800 mb-3">Trésorerie & Stocks</h2>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+          <StatCard
+            label="Encaissements"
+            value={formatCurrency(encaissementsClients)}
+            icon={<ArrowDownToLine className="w-5 h-5 text-emerald-600" />}
+            color="emerald"
+            onClick={() => onNavigate('payments')}
+          />
+          <StatCard
+            label="Créances Clients"
+            value={formatCurrency(creancesClients)}
+            icon={<Clock className="w-5 h-5 text-orange-600" />}
+            color="orange"
+            onClick={() => onNavigate('documents')}
+          />
+          <StatCard
+            label="Dettes Fourn."
+            value={formatCurrency(dettesFournisseurs)}
+            icon={<AlertCircle className="w-5 h-5 text-red-600" />}
+            color="red"
+            onClick={() => onNavigate('supplier_invoices')}
+          />
+          <StatCard
+            label="Valeur du Stock"
+            value={formatCurrency(valeurStock)}
+            icon={<Package className="w-5 h-5 text-indigo-600" />}
+            color="indigo"
+            onClick={() => onNavigate('products')}
+          />
+        </div>
+      </div>
+
       {/* Financial Overview */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         <Card className="border border-emerald-100 shadow-sm bg-gradient-to-br from-emerald-50 to-green-50 overflow-hidden rounded-2xl relative cursor-pointer hover:shadow-md transition-all" onClick={() => onNavigate('documents')}>
@@ -164,12 +219,41 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
         </Card>
       </div>
 
-      {/* Bottom Section: Invoices & Notifications */}
+      {/* Charts Section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        
-        {/* Notifications Center */}
-        <Card className="border-0 shadow-sm flex flex-col">
-          <CardHeader className="pb-3 pt-5 px-5 border-b border-gray-50 bg-white sticky top-0 z-10 rounded-t-xl">
+        <Card className="shadow-sm border-gray-100">
+          <CardHeader className="pb-2 border-b border-gray-50 mb-4">
+            <CardTitle className="text-lg font-semibold text-gray-800 flex items-center gap-2">
+              <TrendingUp className="w-5 h-5 text-emerald-500" />
+              Répartition Financière
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="h-[300px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={pieData}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={60}
+                  outerRadius={100}
+                  paddingAngle={5}
+                  dataKey="value"
+                >
+                  {pieData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.color} />
+                  ))}
+                </Pie>
+                <RechartsTooltip formatter={(value: number) => formatCurrency(value)} />
+                <Legend />
+              </PieChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+
+        {/* Recent Invoices list */}
+        <Card className="shadow-sm border-gray-100 lg:row-span-1">
+          <CardHeader className="flex flex-row items-center justify-between pb-2 border-b border-gray-50 bg-white sticky top-0 z-10 rounded-t-xl">
             <div className="flex items-center justify-between">
               <CardTitle className="text-sm font-semibold text-gray-800 flex items-center gap-2">
                 <AlertCircle className="w-4 h-4 text-blue-500" />

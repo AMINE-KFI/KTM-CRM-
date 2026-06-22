@@ -9,6 +9,7 @@ const pool = mysql.createPool({
   user: process.env.DB_USER || 'root',
   password: process.env.DB_PASSWORD || '',
   database: process.env.DB_NAME || 'katamine_crm',
+  port: Number(process.env.DB_PORT) || 8889,
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0

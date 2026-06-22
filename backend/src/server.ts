@@ -9,6 +9,7 @@ import documentsRouter from './routes/documents';
 import expensesRouter from './routes/expenses';
 import paymentsRouter from './routes/payments';
 import resetRouter from './routes/reset';
+import statsRouter from './routes/stats';
 
 dotenv.config();
 
@@ -33,6 +34,7 @@ app.use('/api/documents', documentsRouter);
 app.use('/api/expenses', expensesRouter);
 app.use('/api/payments', paymentsRouter);
 app.use('/api/reset', resetRouter);
+app.use('/api/stats', statsRouter);
 
 const PORT = process.env.PORT || 5000;
 

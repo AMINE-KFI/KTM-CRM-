@@ -61,6 +61,7 @@ export interface Product {
   price: number; // Prix par défaut historique (vente)
   purchasePrice?: number; // Prix d'achat optionnel
   prices?: Record<string, number>;
+  stockQuantity?: number;
   vatRate: number;
   createdAt: string;
 }
@@ -164,6 +165,7 @@ export interface BusinessDocument {
   linkedDocumentRef?: string;
   tenant: TenantType;
   fiscalYear?: string;
+  paymentMethod?: string;
   createdAt: string;
 }
 

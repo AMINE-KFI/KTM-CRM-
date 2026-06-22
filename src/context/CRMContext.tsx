@@ -101,11 +101,17 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
           api.getPayments()
         ]);
 
-        const companies = companiesRes.status === 'fulfilled' ? companiesRes.value : [];
-        const products = productsRes.status === 'fulfilled' ? productsRes.value : [];
-        const documents = documentsRes.status === 'fulfilled' ? documentsRes.value : [];
-        const expenses = expensesRes.status === 'fulfilled' ? expensesRes.value : [];
-        const payments = paymentsRes.status === 'fulfilled' ? paymentsRes.value : [];
+        let companies: Company[] = [];
+        let products: Product[] = [];
+        let documents: BusinessDocument[] = [];
+        let expenses: Expense[] = [];
+        let payments: Payment[] = [];
+
+        if (companiesRes.status === 'fulfilled') companies = companiesRes.value.data || [];
+        if (productsRes.status === 'fulfilled') products = productsRes.value.data || [];
+        if (documentsRes.status === 'fulfilled') documents = documentsRes.value.data || [];
+        if (expensesRes.status === 'fulfilled') expenses = expensesRes.value.data || [];
+        if (paymentsRes.status === 'fulfilled') payments = paymentsRes.value.data || [];
 
         // Auto-heal document statuses based on payments (fixes legacy data)
         let healedDocuments = [...documents];

@@ -54,6 +54,7 @@ CREATE TABLE IF NOT EXISTS `documents` (
   `stamp_amount` DECIMAL(10, 2) DEFAULT 0,
   `fiscal_year` VARCHAR(10) NOT NULL,
   `tenant` VARCHAR(50) DEFAULT 'katamine',
+  `payment_method` VARCHAR(50) DEFAULT 'À échéance',
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (`company_id`) REFERENCES `companies`(`id`)
 );

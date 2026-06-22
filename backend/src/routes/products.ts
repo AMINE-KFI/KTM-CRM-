@@ -9,8 +9,15 @@ router.use(verifyToken);
 
 router.get('/', async (req, res) => {
   try {
-    const [rows] = await db.query('SELECT * FROM products ORDER BY name ASC');
-    res.json(rows);
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 50;
+    const offset = (page - 1) * limit;
+
+    const [rows]: any = await db.query('SELECT * FROM products ORDER BY name ASC LIMIT ? OFFSET ?', [limit, offset]);
+    const [countResult]: any = await db.query('SELECT COUNT(*) as total FROM products');
+    const total = countResult[0].total;
+
+    res.json({ data: rows, total, page, limit });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

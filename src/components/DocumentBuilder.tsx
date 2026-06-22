@@ -6,8 +6,9 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ArrowLeft, Plus, Trash2, Printer, CreditCard } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Printer, CreditCard, AlertTriangle } from 'lucide-react';
 import { PrintOptionsModal } from './PrintOptionsModal';
+import PaymentModal from './PaymentModal';
 import { generateDocumentPDF } from '@/lib/pdf';
 import type { PrintOptions } from '@/lib/pdf';
 import type { DocumentType, DocumentItem, BusinessDocument } from '@/types';
@@ -42,6 +43,7 @@ export default function DocumentBuilder({ onClose, defaultType = 'invoice', defa
   });
   const [notes, setNotes] = useState(initialData?.notes || sourceData?.notes || '');
   const [poReference, setPoReference] = useState(initialData?.poReference || sourceData?.poReference || '');
+  const [paymentMethod, setPaymentMethod] = useState(initialData?.paymentMethod || 'À échéance');
   
   const [items, setItems] = useState<DocumentItem[]>(
     initialData?.items || 
@@ -127,7 +129,8 @@ export default function DocumentBuilder({ onClose, defaultType = 'invoice', defa
       notes,
       vatRate,
       linkedDocumentId,
-      linkedDocumentRef
+      linkedDocumentRef,
+      paymentMethod
     };
 
     if (initialData) {
@@ -326,9 +329,28 @@ export default function DocumentBuilder({ onClose, defaultType = 'invoice', defa
               </div>
             </div>
             
-            <div className="col-span-2">
-              <Label>Réf. Bon de Commande (Optionnel)</Label>
-              <Input type="text" placeholder="Ex: BC-2026-045" value={poReference} onChange={e => setPoReference(e.target.value)} className="mt-1" disabled={isReadOnly} />
+            <div className="grid grid-cols-2 gap-4 col-span-2">
+              <div>
+                <Label>Réf. Bon de Commande (Optionnel)</Label>
+                <Input type="text" placeholder="Ex: BC-2026-045" value={poReference} onChange={e => setPoReference(e.target.value)} className="mt-1" disabled={isReadOnly} />
+              </div>
+              <div>
+                <Label>Moyen de paiement</Label>
+                <Select value={paymentMethod} onValueChange={setPaymentMethod} disabled={isReadOnly}>
+                  <SelectTrigger className="mt-1">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Espèces">Espèces</SelectItem>
+                    <SelectItem value="Virement bancaire">Virement bancaire</SelectItem>
+                    <SelectItem value="Chèque">Chèque</SelectItem>
+                    <SelectItem value="Versement sur compte">Versement sur compte</SelectItem>
+                    <SelectItem value="Carte bancaire (TPE)">Carte bancaire (TPE)</SelectItem>
+                    <SelectItem value="E-paiement">E-paiement</SelectItem>
+                    <SelectItem value="À échéance">À échéance</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </div>
 
@@ -380,6 +402,7 @@ export default function DocumentBuilder({ onClose, defaultType = 'invoice', defa
                       onChange={e => handleItemChange(item.id, 'quantity', parseFloat(e.target.value) || 0)}
                       disabled={isReadOnly}
                     />
+                    {/* Stock warning removed */}
                   </div>
 
                   <div className="w-32">
