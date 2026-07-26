@@ -10,9 +10,22 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
-dist_parcel
 .parcel-cache
 *.local
+
+# Environnement / secrets (les .env.development et .env.production du frontend ne contiennent
+# aucun secret, juste l'URL publique de l'API : ils restent committés volontairement)
+.env
+.env.local
+.env.*.local
+backend/.env
+backend/.env.*
+!backend/.env.example
+
+# Archives de build ne doivent jamais être committées
+*.zip
+*.tar.gz
+bundle.html
 
 # Editor directories and files
 .vscode/*

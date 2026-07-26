@@ -29,7 +29,7 @@ export default function PaymentModal({ onClose, defaultCompanyId, defaultDocumen
 
   // Filter out documents to allow linking to validated/partially_paid invoices
   const companyDocuments = (data.documents || []).filter(
-    d => d.companyId === companyId && d.type === 'invoice' && (d.status === 'validated' || d.status === 'partially_paid' || d.status === 'overdue')
+    d => d.companyId === companyId && d.type === 'invoice' && (d.status === 'validated' || d.status === 'partially_paid')
   );
 
   const selectedDocsInfo = companyDocuments.filter(d => selectedDocuments.includes(d.id));

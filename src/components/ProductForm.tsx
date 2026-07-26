@@ -23,9 +23,8 @@ export default function ProductForm({ onClose, product }: ProductFormProps) {
   const [vatRate, setVatRate] = useState(product?.vatRate || 19);
 
   // Tenant-specific price
-  const initialTenantPrice = (currentTenant && product?.prices && product.prices[currentTenant]) !== undefined 
-    ? product!.prices![currentTenant] 
-    : '';
+  const tenantPriceValue = currentTenant ? product?.prices?.[currentTenant] : undefined;
+  const initialTenantPrice = tenantPriceValue !== undefined ? tenantPriceValue : '';
   const [tenantPrice, setTenantPrice] = useState<string | number>(initialTenantPrice);
 
   const handleSubmit = (e: React.FormEvent) => {

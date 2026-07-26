@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Slider } from '@/components/ui/slider';
-import { Mail, Bell, Save, CheckCircle, AlertCircle, FileText, Building2, FolderArchive, Plus, Download, Loader2 } from 'lucide-react';
+import { Mail, Bell, Save, CheckCircle, AlertCircle, Building2, FolderArchive, Plus, Download, Loader2 } from 'lucide-react';
 import type { ReminderSettings, FiscalSettings } from '@/types';
 import { formatCurrency, getDaysOverdue, sendReminderEmail } from '@/lib/storage';
 import { useEffect } from 'react';
@@ -16,7 +16,7 @@ import { getCompaniesExcelBlob, getProductsExcelBlob, getCreancesExcelBlob, getP
 import { api } from '@/lib/api';
 
 export default function SettingsPage() {
-  const { data, updateReminderSettings, updateInvoice, getOverdueInvoices, currentTenant, updateFiscalSettings, startNewYear } = useCRM();
+  const { data, updateReminderSettings, updateDocument, getOverdueInvoices, currentTenant, updateFiscalSettings, startNewYear } = useCRM();
   const [settings, setSettings] = useState<ReminderSettings>({ ...data.reminderSettings });
   const [saved, setSaved] = useState(false);
   const [newYearId, setNewYearId] = useState('');
@@ -82,31 +82,42 @@ export default function SettingsPage() {
 
     if (!confirm(`Envoyer des rappels pour ${toSend.length} facture(s) ?`)) return;
 
+    const tenantLabel = currentTenant === 'kltools' ? 'KL Tools' : 'Katamine';
+    let sentCount = 0;
+    let skippedCount = 0;
+
     toSend.forEach(inv => {
       const comptaContact = inv.company?.contacts?.find((c: any) => c.department === 'comptabilite');
       const email = comptaContact?.email || inv.company?.email || '';
-      const newCount = (inv.reminderCount || 0) + 1;
-      
-      if (email) {
-        const mailtoLink = sendReminderEmail(
-          email,
-          inv.invoiceNumber,
-          inv.totalAmount,
-          inv.dueDate,
-          newCount,
-          settings,
-          inv.issueDate
-        );
-        window.open(mailtoLink, '_blank');
+
+      if (!email) {
+        skippedCount++;
+        return;
       }
 
-      updateInvoice(inv.id, {
-        status: 'overdue',
-        reminderSent: true,
+      const newCount = (inv.reminderCount || 0) + 1;
+      const mailtoLink = sendReminderEmail(
+        email,
+        inv.reference,
+        inv.totalAmount,
+        inv.dueDate || inv.date,
+        newCount,
+        settings,
+        inv.date,
+        tenantLabel
+      );
+      window.open(mailtoLink, '_blank');
+      sentCount++;
+
+      updateDocument(inv.id, {
         reminderCount: newCount,
         lastReminderDate: new Date().toISOString().split('T')[0],
       });
     });
+
+    if (skippedCount > 0) {
+      alert(`${sentCount} rappel(s) envoyé(s). ${skippedCount} facture(s) ignorée(s) : le client n'a aucune adresse email renseignée.`);
+    }
   };
 
   const handleCreateYear = () => {
@@ -220,7 +231,7 @@ export default function SettingsPage() {
           <div>
             <h3 className="text-sm font-semibold text-gray-700 mb-3">Exercices existants :</h3>
             <div className="flex flex-wrap gap-2">
-              {(data.fiscalYears || [{ id: data.currentYearId, label: data.currentYearId, isClosed: false }]).map(y => (
+              {(data.fiscalYears || [{ id: data.currentYearId || String(new Date().getFullYear()), label: data.currentYearId || String(new Date().getFullYear()), isClosed: false }]).map(y => (
                 <div key={y.id} className="px-3 py-1.5 bg-gray-100 text-gray-800 rounded-lg text-sm font-medium flex items-center gap-2 border border-gray-200 shadow-sm group">
                   <FolderArchive className="w-4 h-4 text-gray-500" />
                   {y.label}
@@ -443,7 +454,7 @@ export default function SettingsPage() {
                   <div key={inv.id} className={`flex items-center justify-between p-3 rounded-lg border ${needsReminder ? 'bg-amber-50 border-amber-200' : 'bg-gray-50 border-gray-100'}`}>
                     <div>
                       <div className="flex items-center gap-2">
-                        <span className="font-medium text-sm">{inv.invoiceNumber}</span>
+                        <span className="font-medium text-sm">{inv.reference}</span>
                         {needsReminder && (
                           <span className="text-[10px] bg-amber-200 text-amber-800 px-1.5 py-0.5 rounded-full font-semibold">Rappel requis</span>
                         )}

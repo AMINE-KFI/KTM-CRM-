@@ -7,16 +7,14 @@ const defaultSettings: ReminderSettings = {
   firstReminderDays: 7,
   secondReminderDays: 14,
   thirdReminderDays: 30,
-  senderName: 'Service Comptabilité KL TOOLS',
-  senderEmail: 'comptabilite@kltools.com',
-  companyName: 'KL TOOLS',
+  senderName: 'Service Comptabilité',
+  senderEmail: '',
+  companyName: '',
 };
 
 const defaultData: CRMData = {
   companies: [],
-  invoices: [],
   products: [],
-  quotes: [],
   deals: [],
   tasks: [],
   notes: [],
@@ -50,8 +48,8 @@ const defaultData: CRMData = {
   currentTenant: null,
   reminderSettings: defaultSettings,
   fiscalSettings: {
-    katamine: { companyName: 'Katamine', address: '', rc: '', nif: '', nis: '', art: '', capital: '', phone: '', email: '', bankInfo: '' },
-    kltools: { companyName: 'KL Tools', address: '', rc: '', nif: '', nis: '', art: '', capital: '', phone: '', email: '', bankInfo: '' }
+    katamine: { tenant: 'katamine', address: '', rc: '', nif: '', nis: '', art: '', bankName: '', rib: '', phone: '', email: '' },
+    kltools: { tenant: 'kltools', address: '', rc: '', nif: '', nis: '', art: '', bankName: '', rib: '', phone: '', email: '' }
   },
   documents: [],
   payments: [],
@@ -204,11 +202,12 @@ export function sendReminderEmail(
   dueDate: string,
   reminderCount: number,
   settings: ReminderSettings,
-  issueDate?: string
+  issueDate?: string,
+  senderCompanyName?: string
 ): string {
   const subject = getReminderSubject(invoiceNumber, reminderCount);
-  const body = getReminderBody(invoiceNumber, amount, dueDate, reminderCount, settings, issueDate);
-  
+  const body = getReminderBody(invoiceNumber, amount, dueDate, reminderCount, settings, issueDate, senderCompanyName);
+
   return `mailto:${contactEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 }
 
@@ -224,12 +223,13 @@ function getReminderBody(
   dueDate: string,
   _reminderCount: number,
   settings: ReminderSettings,
-  issueDate?: string
+  issueDate?: string,
+  senderCompanyName?: string
 ): string {
   const formattedAmount = new Intl.NumberFormat('fr-DZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount);
   const dateToUse = issueDate ? new Date(issueDate) : new Date(dueDate);
   const formattedDate = new Intl.DateTimeFormat('fr-FR').format(dateToUse);
-  
+
   return `Bonjour Messieurs
          Nous vous demandons de bien vouloir, faire le nécessaire, afin de procéder au règlement de la créance se rapportant à notre facture ci-après non encore honorée à savoir:
 * N°: ${invoiceNumber} du ${formattedDate} de ${formattedAmount} DA/TTC
@@ -238,7 +238,7 @@ function getReminderBody(
 Cordialement votre
 
  Le Service recouvrement
- ${settings.companyName}
+ ${senderCompanyName || settings.companyName}
 
 
 

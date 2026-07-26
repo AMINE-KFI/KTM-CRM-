@@ -220,7 +220,7 @@ export function getPaymentsExcelBlob(payments: Payment[], documents: BusinessDoc
     return {
       'Date': new Date(p.date).toLocaleDateString('fr-FR'),
       'Référence Paiement': p.reference || '-',
-      'Méthode': p.method,
+      'Méthode': p.mode,
       'Montant': p.amount,
       'N° Facture': doc?.reference || '-',
       'Client': company?.name || 'Inconnu',

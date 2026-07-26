@@ -1,9 +1,13 @@
 import express from 'express';
 import db from '../db';
+import { verifyToken, requireAdmin } from '../auth';
+import { asyncHandler } from '../lib/http';
 
 const router = express.Router();
 
-router.post('/', async (req, res) => {
+router.use(verifyToken, requireAdmin);
+
+router.post('/', asyncHandler(async (req, res) => {
   const connection = await (db as any).getConnection();
   try {
     await connection.beginTransaction();
@@ -16,6 +20,8 @@ router.post('/', async (req, res) => {
     await connection.query('DELETE FROM payments');
     await connection.query('DELETE FROM documents');
     await connection.query('DELETE FROM expenses');
+    await connection.query('DELETE FROM stock_movements');
+    await connection.query('DELETE FROM stock_levels');
     await connection.query('DELETE FROM products');
     await connection.query('DELETE FROM companies');
 
@@ -28,10 +34,10 @@ router.post('/', async (req, res) => {
     await connection.rollback();
     await connection.query('SET FOREIGN_KEY_CHECKS = 1').catch(() => {});
     console.error('Reset DB Error:', err);
-    res.status(500).json({ error: err.message });
+    throw err;
   } finally {
     connection.release();
   }
-});
+}));
 
 export default router;

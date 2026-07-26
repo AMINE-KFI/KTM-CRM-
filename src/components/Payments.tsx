@@ -3,7 +3,6 @@ import { useCRM } from '@/context/CRMContext';
 import { Card, CardContent } from '@/components/ui/card';
 import { formatCurrency } from '@/lib/storage';
 import { CreditCard, TrendingUp, Clock, Download, FileText, Search, MoreHorizontal, ArrowUpDown, Calendar as CalendarIcon, X, Filter, ChevronLeft, ChevronRight, Check } from 'lucide-react';
-import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
@@ -296,7 +295,6 @@ export default function Payments() {
                   ))}
                 </div>
                 <Calendar
-                  initialFocus
                   mode="range"
                   defaultMonth={dateRange?.from}
                   selected={{ from: dateRange.from, to: dateRange.to }}
@@ -494,8 +492,8 @@ export default function Payments() {
       </Card>
 
       {paymentCompanyId && (
-        <PaymentModal 
-          companyId={paymentCompanyId}
+        <PaymentModal
+          defaultCompanyId={paymentCompanyId}
           onClose={() => setPaymentCompanyId(null)}
         />
       )}

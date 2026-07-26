@@ -12,8 +12,6 @@ interface CompanyFormProps {
   onClose: () => void;
 }
 
-const LEGAL_FORMS = ['SARL', 'EURL', 'SPA', 'SNC', 'SCS', 'Auto-entrepreneur', 'Autre'];
-
 export default function CompanyForm({ company, defaultRole = 'client', onClose }: CompanyFormProps) {
   const { addCompany, updateCompany } = useCRM();
   const isEdit = !!company;
@@ -31,7 +29,7 @@ export default function CompanyForm({ company, defaultRole = 'client', onClose }
     address: company?.address || '',
     city: company?.city || '',
     postalCode: company?.postalCode || '',
-    country: company?.country || 'France',
+    country: company?.country || 'Algérie',
     email: company?.email || '',
     phone: company?.phone || '',
     website: company?.website || '',

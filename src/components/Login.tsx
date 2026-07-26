@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Lock, Mail, AlertCircle, Building2 } from 'lucide-react';
+import { Lock, Mail, AlertCircle } from 'lucide-react';
 import { API_URL } from '../lib/api';
 import { useCRM } from '../context/CRMContext';
 import type { TenantType } from '../types';
@@ -31,9 +31,19 @@ export default function Login() {
       }
 
       localStorage.setItem('token', data.token);
-      
-      setCurrentTenant(tenant);
-      setCurrentUserId(data.user.id, data.user);
+
+      const [firstName, ...rest] = (data.user.name || '').split(' ');
+      setCurrentTenant(data.user.tenant || tenant);
+      setCurrentUserId(data.user.id, {
+        id: data.user.id,
+        firstName: firstName || data.user.name || '',
+        lastName: rest.join(' '),
+        email: data.user.email,
+        role: data.user.role === 'admin' ? 'admin' : 'employee',
+        permissions: typeof data.user.permissions === 'string' ? JSON.parse(data.user.permissions) : (data.user.permissions || []),
+        tenant: data.user.tenant || undefined,
+        createdAt: new Date().toISOString()
+      });
       
     } catch (err: any) {
       setError(err.message);

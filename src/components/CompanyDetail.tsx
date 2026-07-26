@@ -1,13 +1,13 @@
 import { useState, useRef, useEffect } from 'react';
 import { useCRM } from '@/context/CRMContext';
 import type { Contact, Deal } from '@/types';
-import { formatCurrency, formatDate, getDepartmentLabel, getDaysOverdue } from '@/lib/storage';
+import { formatCurrency, formatDate, getDepartmentLabel } from '@/lib/storage';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   ArrowLeft, Building2, Edit, Trash2, Plus, Phone, Mail, Globe,
-  FileText, Users, MessageSquare, Target, Upload, Download, AlignLeft, Briefcase
+  FileText, Users, MessageSquare, Target, Upload, Download
 } from 'lucide-react';
 import CompanyForm from './CompanyForm';
 import ContactForm from './ContactForm';
@@ -27,7 +27,7 @@ interface CompanyDetailProps {
 }
 
 export default function CompanyDetail({ companyId, onBack }: CompanyDetailProps) {
-  const { data, getCompany, deleteCompany, getInvoicesForCompany, addNote, getClientSituation, updateDocument, deleteDocument } = useCRM();
+  const { data, getCompany, deleteCompany, getInvoicesForCompany, addNote, deleteNote, deleteContact, getClientSituation, updateDocument, deleteDocument } = useCRM();
   const company = getCompany(companyId);
   const [showEditForm, setShowEditForm] = useState(false);
   const [showContactForm, setShowContactForm] = useState(false);
@@ -801,7 +801,7 @@ export default function CompanyDetail({ companyId, onBack }: CompanyDetailProps)
           />
         </ErrorBoundary>
       )}
-      {showPaymentModal && <PaymentModal onClose={() => setShowPaymentModal(false)} companyId={company.id} />}
+      {showPaymentModal && <PaymentModal onClose={() => setShowPaymentModal(false)} defaultCompanyId={company.id} />}
 
       <PrintOptionsModal 
         isOpen={!!printDoc} 

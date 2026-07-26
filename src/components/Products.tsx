@@ -4,7 +4,7 @@ import { formatCurrency, formatDate } from '@/lib/storage';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Package, Plus, Search, MoreVertical, Edit2, Upload, Download, FileSpreadsheet, ChevronRight, FileText, Filter, TrendingUp, Layers, ArrowUpDown } from 'lucide-react';
+import { Package, Plus, Search, MoreVertical, Edit2, Upload, Download, FileSpreadsheet, ChevronRight, FileText, Filter, Layers, ArrowUpDown } from 'lucide-react';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator
 } from '@/components/ui/dropdown-menu';
@@ -15,7 +15,7 @@ import ProductForm from './ProductForm';
 import type { Product } from '@/types';
 
 export default function Products() {
-  const { data, currentTenant, addProduct, updateProduct, deleteProduct } = useCRM();
+  const { data, currentTenant, addProduct, deleteProduct } = useCRM();
   const [search, setSearch] = useState('');
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | undefined>(undefined);

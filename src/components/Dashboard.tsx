@@ -6,10 +6,10 @@ import { Button } from '@/components/ui/button';
 import {
   Building2, Users, FileText, AlertCircle,
   TrendingUp, TrendingDown, Clock, CheckCircle2,
-  AlertTriangle, Loader2, ArrowDownToLine, Package
+  AlertTriangle, ArrowDownToLine, Package
 } from 'lucide-react';
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
+  Tooltip as RechartsTooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend
 } from 'recharts';
 
@@ -18,10 +18,10 @@ interface DashboardProps {
 }
 
 export default function Dashboard({ onNavigate }: DashboardProps) {
-  const { data, tenant, getOverdueInvoices } = useCRM();
-  
+  const { data, currentTenant: tenant, getOverdueInvoices } = useCRM();
+
   const overdueInvoices = getOverdueInvoices();
-  
+
   const stats = {
     totalCompanies: data.companies.filter(c => c.role === 'client' || !c.role || c.role === 'both').length,
     totalContacts: (data.companies || []).reduce((sum, c) => sum + (c.contacts || []).length, 0),
@@ -37,16 +37,24 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
   const localTotalPurchases = localSupplierInvoices.reduce((sum, d) => sum + d.totalAmount, 0);
   const localTotalExpenses = (data.expenses || []).reduce((sum, e) => sum + e.amount, 0);
 
-  const encaissementsClients = (data.payments || []).filter(p => p.type === 'in' && (!tenant || p.tenant === tenant)).reduce((sum, p) => sum + p.amount, 0);
-  const paiementsFournisseurs = (data.payments || []).filter(p => p.type === 'out' && (!tenant || p.tenant === tenant)).reduce((sum, p) => sum + p.amount, 0);
-  
+  // La direction d'un paiement (encaissement client vs paiement fournisseur) se déduit du type
+  // du document lié : Payment n'a pas de champ "type" propre.
+  const encaissementsClients = (data.payments || []).reduce((sum, p) => {
+    const doc = (data.documents || []).find(d => d.id === p.documentId);
+    return doc?.type === 'invoice' ? sum + p.amount : sum;
+  }, 0);
+  const paiementsFournisseurs = (data.payments || []).reduce((sum, p) => {
+    const doc = (data.documents || []).find(d => d.id === p.documentId);
+    return doc?.type === 'supplier_invoice' ? sum + p.amount : sum;
+  }, 0);
+
   const creancesClients = localTotalSales - encaissementsClients;
   const dettesFournisseurs = localTotalPurchases - paiementsFournisseurs;
 
   let valeurStock = 0;
   (data.products || []).forEach(p => {
     const price = tenant && p.prices && p.prices[tenant] !== undefined ? p.prices[tenant] : p.price;
-    const stock = p.stockQuantity || 0;
+    const stock = (tenant && p.stock?.[tenant]) || 0;
     valeurStock += price * stock;
   });
 
@@ -244,7 +252,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
                     <Cell key={`cell-${index}`} fill={entry.color} />
                   ))}
                 </Pie>
-                <RechartsTooltip formatter={(value: number) => formatCurrency(value)} />
+                <RechartsTooltip formatter={(value) => formatCurrency(Number(value) || 0)} />
                 <Legend />
               </PieChart>
             </ResponsiveContainer>

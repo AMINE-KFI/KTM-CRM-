@@ -62,6 +62,7 @@ export interface Product {
   purchasePrice?: number; // Prix d'achat optionnel
   prices?: Record<string, number>;
   stockQuantity?: number;
+  stock?: Partial<Record<TenantType, number>>; // Niveaux de stock par société, chargés depuis stock_levels
   vatRate: number;
   createdAt: string;
 }
@@ -166,6 +167,9 @@ export interface BusinessDocument {
   tenant: TenantType;
   fiscalYear?: string;
   paymentMethod?: string;
+  stampAmount?: number;
+  reminderCount?: number;
+  lastReminderDate?: string;
   createdAt: string;
 }
 
@@ -177,21 +181,22 @@ export interface Payment {
   date: string;
   mode: 'cash' | 'check' | 'transfer' | 'traite';
   reference?: string;
-  tenant: TenantType;
+  notes?: string;
+  tenant?: TenantType;
   fiscalYear?: string;
 }
 
 export interface FiscalSettings {
-  companyName: string;
+  tenant: TenantType;
   address: string;
   rc: string;
   nif: string;
   nis: string;
   art: string;
-  capital: string;
+  bankName: string;
+  rib: string;
   phone: string;
   email: string;
-  bankInfo: string;
 }
 
 export interface StockMovement {
@@ -206,14 +211,13 @@ export interface StockMovement {
 
 export interface Expense {
   id: string;
-  title: string;
-  category: 'rent' | 'utilities' | 'salaries' | 'taxes' | 'supplies' | 'other';
+  description: string;
+  category: string;
   amount: number;
   date: string;
   paymentMethod: string;
   reference?: string;
-  notes?: string;
-  tenant: TenantType;
+  tenant?: TenantType;
   fiscalYear?: string;
   createdAt: string;
 }

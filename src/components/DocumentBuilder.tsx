@@ -1,17 +1,18 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useCRM } from '@/context/CRMContext';
 import { formatCurrency, generateId } from '@/lib/storage';
+import { calculateStampDuty } from '@/lib/fiscal';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ArrowLeft, Plus, Trash2, Printer, CreditCard, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Printer, CreditCard } from 'lucide-react';
 import { PrintOptionsModal } from './PrintOptionsModal';
 import PaymentModal from './PaymentModal';
 import { generateDocumentPDF } from '@/lib/pdf';
 import type { PrintOptions } from '@/lib/pdf';
-import type { DocumentType, DocumentItem, BusinessDocument } from '@/types';
+import type { DocumentType, DocumentItem, BusinessDocument, TenantType } from '@/types';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 
 interface DocumentBuilderProps {
@@ -24,16 +25,22 @@ interface DocumentBuilderProps {
 }
 
 export default function DocumentBuilder({ onClose, defaultType = 'invoice', defaultCompanyId = '', initialData, sourceData, onConvert }: DocumentBuilderProps) {
-  const { data, addDocument, updateDocument, tenant: globalTenant, currentUser, addActivityLog } = useCRM();
+  const { data, addDocument, updateDocument, currentTenant: globalTenant, currentUser, addActivityLog, getCompany } = useCRM();
   
   const isReadOnly = initialData && initialData.status !== 'draft';
 
-  const [tenant, setTenant] = useState<TenantType>(initialData?.tenant || globalTenant || 'katamine');
+  const [tenant] = useState<TenantType>(initialData?.tenant || globalTenant || 'katamine');
   const [isPrintOptionsOpen, setIsPrintOptionsOpen] = useState(false);
   const [type, setType] = useState<DocumentType>(initialData?.type || defaultType);
   const isPurchase = type === 'purchase_order' || type === 'supplier_invoice' || type === 'receipt_note';
   const [companyId, setCompanyId] = useState(initialData?.companyId || sourceData?.companyId || defaultCompanyId);
-  const [vatRate, setVatRate] = useState<number>(initialData?.vatRate ?? sourceData?.vatRate ?? 0.19);
+  // Le taux global sert de valeur par défaut pour les nouvelles lignes ; en édition, on le déduit
+  // du document existant (BusinessDocument n'a pas de champ vatRate propre, seul le detail par ligne l'a).
+  const [vatRate, setVatRate] = useState<number>(() => {
+    const source = initialData || sourceData;
+    if (source && source.subtotal > 0) return source.vatAmount / source.subtotal;
+    return 0.19;
+  });
   const [issueDate, setIssueDate] = useState(() => initialData?.createdAt ? initialData.createdAt.split('T')[0] : new Date().toISOString().split('T')[0]);
   const [dueDate, setDueDate] = useState(() => {
     if (initialData?.dueDate) return initialData.dueDate;
@@ -44,19 +51,29 @@ export default function DocumentBuilder({ onClose, defaultType = 'invoice', defa
   const [notes, setNotes] = useState(initialData?.notes || sourceData?.notes || '');
   const [poReference, setPoReference] = useState(initialData?.poReference || sourceData?.poReference || '');
   const [paymentMethod, setPaymentMethod] = useState(initialData?.paymentMethod || 'À échéance');
-  
+  const [stampAmount, setStampAmount] = useState<number>(initialData?.stampAmount ?? 0);
+  // Le timbre est recalculé automatiquement (barème algérien par tranches, paiement en espèces
+  // uniquement) tant que l'utilisateur n'a pas corrigé le montant lui-même.
+  const [stampAmountTouched, setStampAmountTouched] = useState(false);
+
   const [items, setItems] = useState<DocumentItem[]>(
     initialData?.items || 
     (sourceData?.items ? sourceData.items.map(i => ({...i, id: generateId()})) : [])
   );
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
-  const [linkedDocumentId, setLinkedDocumentId] = useState(initialData?.linkedDocumentId || sourceData?.id || undefined);
-  const [linkedDocumentRef, setLinkedDocumentRef] = useState(initialData?.linkedDocumentRef || sourceData?.reference || undefined);
+  const [linkedDocumentId] = useState(initialData?.linkedDocumentId || sourceData?.id || undefined);
+  const [linkedDocumentRef] = useState(initialData?.linkedDocumentRef || sourceData?.reference || undefined);
 
   // Calculate totals
   const subTotal = useMemo(() => items.reduce((sum, item) => sum + item.total, 0), [items]);
   const taxAmount = subTotal * vatRate;
-  const totalAmount = subTotal + taxAmount;
+
+  useEffect(() => {
+    if (stampAmountTouched || isReadOnly) return;
+    setStampAmount(paymentMethod === 'Espèces' ? calculateStampDuty(subTotal + taxAmount) : 0);
+  }, [paymentMethod, subTotal, taxAmount, stampAmountTouched, isReadOnly]);
+
+  const totalAmount = subTotal + taxAmount + stampAmount;
 
   const totalPaid = initialData ? (data.payments || []).filter(p => p.documentId === initialData.id).reduce((sum, p) => sum + p.amount, 0) : 0;
   const balanceDue = initialData ? initialData.totalAmount - totalPaid : 0;
@@ -65,9 +82,10 @@ export default function DocumentBuilder({ onClose, defaultType = 'invoice', defa
     setItems(prev => [...prev, {
       id: generateId(),
       productId: '',
-      name: '',
+      description: '',
       quantity: 1,
       unitPrice: 0,
+      vatRate: vatRate * 100,
       total: 0
     }]);
   };
@@ -86,7 +104,7 @@ export default function DocumentBuilder({ onClose, defaultType = 'invoice', defa
       if (field === 'productId') {
         const product = data.products.find(p => p.id === value);
         if (product) {
-          updated.name = product.name;
+          updated.description = product.name;
           const price = tenant && product.prices && product.prices[tenant] 
             ? product.prices[tenant] 
             : product.price;
@@ -120,6 +138,7 @@ export default function DocumentBuilder({ onClose, defaultType = 'invoice', defa
       items,
       subtotal: subTotal,
       vatAmount: taxAmount,
+      stampAmount,
       totalAmount,
       status: targetStatus,
       date: issueDate,
@@ -141,7 +160,7 @@ export default function DocumentBuilder({ onClose, defaultType = 'invoice', defa
           title: 'Document validé',
           description: `${currentUser.firstName} a validé le document ${initialData.reference || 'sans référence'}`,
           userId: currentUser.id,
-          tenant: globalTenant,
+          tenant: globalTenant || undefined,
         });
       }
     } else {
@@ -152,7 +171,7 @@ export default function DocumentBuilder({ onClose, defaultType = 'invoice', defa
           title: 'Document validé',
           description: `${currentUser.firstName} a validé le document ${newDoc.reference || 'sans référence'}`,
           userId: currentUser.id,
-          tenant: globalTenant,
+          tenant: globalTenant || undefined,
         });
       }
     }
@@ -366,7 +385,7 @@ export default function DocumentBuilder({ onClose, defaultType = 'invoice', defa
             </div>
             
             <div className="space-y-3">
-              {items.map((item, index) => (
+              {items.map((item) => (
                 <div key={item.id} className="flex items-start gap-3 bg-white p-3 border border-gray-100 rounded-md shadow-sm">
                   <div className="flex-1">
                     <Label className="text-xs">Produit / Service</Label>
@@ -384,10 +403,10 @@ export default function DocumentBuilder({ onClose, defaultType = 'invoice', defa
                   
                   <div className="w-32">
                     <Label className="text-xs">Nom personnalisé</Label>
-                    <Input 
-                      className="mt-1 h-9 bg-white" 
-                      value={item.name} 
-                      onChange={e => handleItemChange(item.id, 'name', e.target.value)}
+                    <Input
+                      className="mt-1 h-9 bg-white"
+                      value={item.description}
+                      onChange={e => handleItemChange(item.id, 'description', e.target.value)}
                       placeholder={item.productId ? "" : "Nom libre"}
                       disabled={isReadOnly}
                     />
@@ -444,7 +463,7 @@ export default function DocumentBuilder({ onClose, defaultType = 'invoice', defa
             
             {items.length > 0 && (
               <div className="mt-6 flex justify-end">
-                <div className="w-64 space-y-2">
+                <div className="w-72 space-y-2">
                   <div className="flex justify-between text-sm text-gray-600">
                     <span>Total HT</span>
                     <span>{formatCurrency(subTotal)}</span>
@@ -452,6 +471,22 @@ export default function DocumentBuilder({ onClose, defaultType = 'invoice', defa
                   <div className="flex justify-between text-sm text-gray-600">
                     <span>TVA ({vatRate * 100}%)</span>
                     <span>{formatCurrency(taxAmount)}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-sm text-gray-600 gap-2">
+                    <span>Droit de timbre {paymentMethod === 'Espèces' ? '(espèces)' : ''}</span>
+                    {isReadOnly ? (
+                      <span>{formatCurrency(stampAmount)}</span>
+                    ) : (
+                      <Input
+                        type="number" min="0" step="1"
+                        className="h-8 w-28 text-right"
+                        value={stampAmount}
+                        onChange={e => {
+                          setStampAmountTouched(true);
+                          setStampAmount(parseFloat(e.target.value) || 0);
+                        }}
+                      />
+                    )}
                   </div>
                   <div className="flex justify-between text-lg font-bold text-gray-900 border-t pt-2 mt-2">
                     <span>Net à payer</span>

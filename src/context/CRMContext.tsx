@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import type { CRMData, Company, Contact, ReminderSettings, Product, Deal, Task, Note, Employee, TenantType, ActivityLog, FiscalSettings, Expense } from '../types';
 import { loadData, saveData, generateId } from '../lib/storage';
 import { api } from '../lib/api';
-import type { BusinessDocument, Payment, StockMovement } from '../types';
+import type { BusinessDocument, Payment, StockMovement, DocumentStatus } from '../types';
 
 interface CRMContextType {
   data: CRMData;
@@ -64,8 +64,7 @@ interface CRMContextType {
   addStockMovement: (movement: Omit<StockMovement, 'id' | 'createdAt'>) => StockMovement;
   // Settings
   updateFiscalSettings: (tenant: string, settings: FiscalSettings) => void;
-  addStockMovement: (movement: Omit<StockMovement, 'id' | 'createdAt'>) => StockMovement;
-  
+
   // ERP Documents
   addDocument: (doc: Omit<BusinessDocument, 'id' | 'createdAt' | 'reference'>) => BusinessDocument;
   updateDocument: (id: string, updates: Partial<BusinessDocument>) => void;
@@ -84,21 +83,23 @@ const CRMContext = createContext<CRMContextType | null>(null);
 
 export function CRMProvider({ children }: { children: React.ReactNode }) {
   const [data, setData] = useState<CRMData>(() => loadData());
-  const [isInitializing, setIsInitializing] = useState(true);
 
-  // Synchronisation avec l'API au démarrage
+  // Synchronisation avec l'API au démarrage ET à chaque connexion (data.currentUserId change)
   useEffect(() => {
     const fetchData = async () => {
       try {
         const token = localStorage.getItem('token');
         if (!token) return;
 
-        const [companiesRes, productsRes, documentsRes, expensesRes, paymentsRes] = await Promise.allSettled([
+        const [companiesRes, productsRes, documentsRes, expensesRes, paymentsRes, stockKatamineRes, stockKltoolsRes, usersRes] = await Promise.allSettled([
           api.getCompanies(),
           api.getProducts(),
           api.getDocuments(),
           api.getExpenses(),
-          api.getPayments()
+          api.getPayments(),
+          api.getStockLevels('katamine'),
+          api.getStockLevels('kltools'),
+          api.getUsers()
         ]);
 
         let companies: Company[] = [];
@@ -113,25 +114,28 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
         if (expensesRes.status === 'fulfilled') expenses = expensesRes.value.data || [];
         if (paymentsRes.status === 'fulfilled') payments = paymentsRes.value.data || [];
 
+        const stockKatamine = stockKatamineRes.status === 'fulfilled' ? stockKatamineRes.value : {};
+        const stockKltools = stockKltoolsRes.status === 'fulfilled' ? stockKltoolsRes.value : {};
+        products = products.map(p => ({
+          ...p,
+          stock: { katamine: stockKatamine[p.id] || 0, kltools: stockKltools[p.id] || 0 }
+        }));
+
         // Auto-heal document statuses based on payments (fixes legacy data)
-        let healedDocuments = [...documents];
-        let hasHealed = false;
-        
-        healedDocuments = healedDocuments.map(doc => {
+        const healedDocuments = documents.map(doc => {
           if (doc.status !== 'paid' && doc.status !== 'cancelled') {
             const totalPaidForDoc = payments
               .filter((p: any) => p.documentId === doc.id)
               .reduce((sum: number, p: any) => sum + p.amount, 0);
-            
-            let newStatus = doc.status;
+
+            let newStatus: DocumentStatus = doc.status;
             if (totalPaidForDoc >= doc.totalAmount && doc.totalAmount > 0) {
               newStatus = 'paid';
             } else if (totalPaidForDoc > 0) {
               newStatus = 'partially_paid';
             }
-            
+
             if (newStatus !== doc.status) {
-              hasHealed = true;
               const healedDoc = { ...doc, status: newStatus };
               // Fire-and-forget update to the DB
               api.updateDocument(doc.id, healedDoc).catch(() => {});
@@ -141,23 +145,34 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
           return doc;
         });
 
-        setData(prev => ({
-          ...prev,
-          companies,
-          products,
-          documents: healedDocuments,
-          expenses,
-          payments
-        }));
+        setData(prev => {
+          // L'utilisateur courant (issu du login) reste dans la liste même si /api/users est refusé (non-admin)
+          const currentUserEntry = (prev.employees || []).find(e => e.id === prev.currentUserId);
+          let employees = prev.employees || [];
+          if (usersRes.status === 'fulfilled') {
+            employees = usersRes.value;
+            if (currentUserEntry && !employees.some(e => e.id === currentUserEntry.id)) {
+              employees = [...employees, currentUserEntry];
+            }
+          }
+
+          return {
+            ...prev,
+            companies,
+            products,
+            documents: healedDocuments,
+            expenses,
+            payments,
+            employees
+          };
+        });
       } catch (err) {
         console.error('Erreur de synchronisation avec l\'API:', err);
-      } finally {
-        setIsInitializing(false);
       }
     };
 
     fetchData();
-  }, [data.currentUser]); // Re-fetch quand l'utilisateur change
+  }, [data.currentUserId]); // Re-fetch quand l'utilisateur se connecte/déconnecte
 
   // Sauvegarde dans le localStorage (pour les logs, employés, configs)
   useEffect(() => {
@@ -189,14 +204,18 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const updateCompany = useCallback((id: string, updates: Partial<Company>) => {
+    // Important : l'appel API doit rester HORS du updater setData(prev => ...). React 18 StrictMode
+    // invoque les fonctions updater deux fois en dev pour détecter les effets de bord impurs — un
+    // appel API placé dedans part donc deux fois, provoquant des écritures concurrentes en base.
+    let fullEntity: Company | undefined;
     setData(prev => {
       const newCompanies = prev.companies.map(c => c.id === id ? { ...c, ...updates } : c);
-      const fullEntity = newCompanies.find(c => c.id === id);
-      if (fullEntity) {
-        api.updateCompany(id, fullEntity).catch(err => alert("Erreur lors de la modification de l'entreprise: " + err.message));
-      }
+      fullEntity = newCompanies.find(c => c.id === id);
       return { ...prev, companies: newCompanies };
     });
+    if (fullEntity) {
+      api.updateCompany(id, fullEntity).catch(err => alert("Erreur lors de la modification de l'entreprise: " + err.message));
+    }
   }, []);
 
   const deleteCompany = useCallback((id: string) => {
@@ -218,11 +237,13 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
       id: generateId(),
       createdAt: new Date().toISOString(),
     };
+    let companyToSync: Company | undefined;
+    let syncedContacts: Contact[] = [];
     setData(prev => {
       const company = prev.companies.find(c => c.id === contact.companyId);
       if (company) {
-        const updatedContacts = [...(company.contacts || []), newContact];
-        api.updateCompany(company.id, { ...company, contacts: updatedContacts }).catch(err => alert("Erreur Serveur: " + err.message));
+        companyToSync = company;
+        syncedContacts = [...(company.contacts || []), newContact];
       }
       return {
         ...prev,
@@ -233,45 +254,40 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
         ),
       };
     });
+    if (companyToSync) {
+      api.updateCompany(companyToSync.id, { ...companyToSync, contacts: syncedContacts }).catch(err => alert("Erreur Serveur: " + err.message));
+    }
     return newContact;
   }, []);
 
   const updateContact = useCallback((id: string, updates: Partial<Contact>) => {
+    let targetCompany: Company | undefined;
+    let updatedContacts: Contact[] = [];
     setData(prev => {
-      let targetCompany: Company | null = null;
-      let updatedContacts: Contact[] = [];
-      const newCompanies = prev.companies.map(c => {
-        if ((c.contacts || []).some(ct => ct.id === id)) {
-          targetCompany = c;
-          updatedContacts = (c.contacts || []).map(ct => ct.id === id ? { ...ct, ...updates } : ct);
-          return { ...c, contacts: updatedContacts };
-        }
-        return c;
-      });
-      if (targetCompany) {
-        api.updateCompany(targetCompany.id, { ...targetCompany, contacts: updatedContacts }).catch(err => alert("Erreur Serveur: " + err.message));
-      }
+      targetCompany = prev.companies.find(c => (c.contacts || []).some(ct => ct.id === id));
+      if (!targetCompany) return prev;
+      updatedContacts = (targetCompany.contacts || []).map(ct => ct.id === id ? { ...ct, ...updates } : ct);
+      const newCompanies = prev.companies.map(c => c.id === targetCompany!.id ? { ...c, contacts: updatedContacts } : c);
       return { ...prev, companies: newCompanies };
     });
+    if (targetCompany) {
+      api.updateCompany(targetCompany.id, { ...targetCompany, contacts: updatedContacts }).catch(err => alert("Erreur Serveur: " + err.message));
+    }
   }, []);
 
   const deleteContact = useCallback((id: string) => {
+    let targetCompany: Company | undefined;
+    let updatedContacts: Contact[] = [];
     setData(prev => {
-      let targetCompany: Company | null = null;
-      let updatedContacts: Contact[] = [];
-      const newCompanies = prev.companies.map(c => {
-        if ((c.contacts || []).some(ct => ct.id === id)) {
-          targetCompany = c;
-          updatedContacts = (c.contacts || []).filter(ct => ct.id !== id);
-          return { ...c, contacts: updatedContacts };
-        }
-        return c;
-      });
-      if (targetCompany) {
-        api.updateCompany(targetCompany.id, { ...targetCompany, contacts: updatedContacts }).catch(err => alert("Erreur Serveur: " + err.message));
-      }
+      targetCompany = prev.companies.find(c => (c.contacts || []).some(ct => ct.id === id));
+      if (!targetCompany) return prev;
+      updatedContacts = (targetCompany.contacts || []).filter(ct => ct.id !== id);
+      const newCompanies = prev.companies.map(c => c.id === targetCompany!.id ? { ...c, contacts: updatedContacts } : c);
       return { ...prev, companies: newCompanies };
     });
+    if (targetCompany) {
+      api.updateCompany(targetCompany.id, { ...targetCompany, contacts: updatedContacts }).catch(err => alert("Erreur Serveur: " + err.message));
+    }
   }, []);
 
   const getInvoicesForCompany = useCallback((companyId: string) => {
@@ -292,7 +308,7 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
       .filter(inv => {
         if (data.currentTenant && inv.tenant !== data.currentTenant) return false;
         if (inv.status === 'paid') return false;
-        const due = new Date(inv.dueDate);
+        const due = new Date(inv.dueDate || inv.date);
         return due < today;
       })
       .map(inv => {
@@ -332,14 +348,15 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const updateProduct = useCallback((id: string, updates: Partial<Product>) => {
+    let fullEntity: Product | undefined;
     setData(prev => {
       const newProducts = prev.products.map(p => p.id === id ? { ...p, ...updates } : p);
-      const fullEntity = newProducts.find(p => p.id === id);
-      if (fullEntity) {
-        api.updateProduct(id, fullEntity).catch(err => alert("Erreur Serveur: " + err.message));
-      }
+      fullEntity = newProducts.find(p => p.id === id);
       return { ...prev, products: newProducts };
     });
+    if (fullEntity) {
+      api.updateProduct(id, fullEntity).catch(err => alert("Erreur Serveur: " + err.message));
+    }
   }, []);
 
   const deleteProduct = useCallback((id: string) => {
@@ -499,18 +516,52 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
   const addEmployee = useCallback((emp: Omit<Employee, 'id' | 'createdAt'>): Employee => {
     let newEmp: Employee | null = null;
     setData(prev => {
-      newEmp = { ...emp, id: generateId(), createdAt: new Date().toISOString(), tenant: prev.currentTenant || undefined };
+      newEmp = { ...emp, id: generateId(), createdAt: new Date().toISOString(), tenant: emp.tenant ?? (prev.currentTenant || undefined) };
       return { ...prev, employees: [...(prev.employees || []), newEmp] };
     });
+
+    setTimeout(() => {
+      if (!newEmp) return;
+      const emp2 = newEmp;
+      api.addUser({
+        id: emp2.id,
+        email: emp2.email,
+        password: emp2.password,
+        name: `${emp2.firstName} ${emp2.lastName}`.trim(),
+        role: emp2.role === 'admin' ? 'admin' : 'user',
+        tenant: emp2.tenant || null,
+        permissions: emp2.permissions || []
+      }).catch(err => {
+        alert("Erreur lors de la création de l'employé : " + err.message);
+        setData(prev => ({ ...prev, employees: (prev.employees || []).filter(e => e.id !== emp2.id) }));
+      });
+    }, 0);
+
     return newEmp || ({} as Employee);
   }, []);
 
   const updateEmployee = useCallback((id: string, updates: Partial<Employee>) => {
-    setData(prev => ({ ...prev, employees: (prev.employees || []).map(e => e.id === id ? { ...e, ...updates } : e) }));
+    let fullEntity: Employee | undefined;
+    setData(prev => {
+      const newEmployees = (prev.employees || []).map(e => e.id === id ? { ...e, ...updates } : e);
+      fullEntity = newEmployees.find(e => e.id === id);
+      return { ...prev, employees: newEmployees };
+    });
+    if (fullEntity) {
+      api.updateUser(id, {
+        email: fullEntity.email,
+        password: updates.password,
+        name: `${fullEntity.firstName} ${fullEntity.lastName}`.trim(),
+        role: fullEntity.role === 'admin' ? 'admin' : 'user',
+        tenant: fullEntity.tenant || null,
+        permissions: fullEntity.permissions || []
+      }).catch(err => alert("Erreur lors de la modification de l'employé : " + err.message));
+    }
   }, []);
 
   const deleteEmployee = useCallback((id: string) => {
     setData(prev => ({ ...prev, employees: (prev.employees || []).filter(e => e.id !== id) }));
+    api.deleteUser(id).catch(err => alert("Erreur Serveur : " + err.message));
   }, []);
 
   const addActivityLog = useCallback((log: Omit<ActivityLog, 'id' | 'createdAt'>) => {
@@ -631,21 +682,33 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
     });
     
     setTimeout(() => {
-      api.addDocument(newDoc).catch(err => alert("Erreur Serveur: " + err.message));
+      // La référence ci-dessus est une estimation optimiste pour l'affichage immédiat : le serveur
+      // attribue le numéro définitif de façon atomique (évite les doublons entre deux validations
+      // concurrentes). On recale l'état local si le serveur a renvoyé un numéro différent.
+      api.addDocument(newDoc).then(res => {
+        if (res?.reference && res.reference !== newDoc.reference) {
+          setData(prev => ({
+            ...prev,
+            documents: (prev.documents || []).map(d => d.id === newDoc.id ? { ...d, reference: res.reference } : d)
+          }));
+        }
+      }).catch(err => alert("Erreur Serveur: " + err.message));
     }, 0);
-    
+
     return newDoc;
   }, []);
 
   const updateDocument = useCallback((id: string, updates: Partial<BusinessDocument>) => {
+    let docToSync: BusinessDocument | null = null;
     setData(prev => {
       const docs = prev.documents || [];
       const oldDoc = docs.find(d => d.id === id);
       if (!oldDoc) return prev;
 
-      // Business Rule: Can only modify drafts. If not draft, can only change status (e.g. to cancelled or paid)
+      // Business Rule: Can only modify drafts. If not draft, only status and reminder tracking can change.
+      const ALLOWED_NON_DRAFT_KEYS = ['status', 'reminderCount', 'lastReminderDate'];
       const updatedKeys = Object.keys(updates);
-      const isStatusOnlyChange = updatedKeys.every(k => k === 'status');
+      const isStatusOnlyChange = updatedKeys.every(k => ALLOWED_NON_DRAFT_KEYS.includes(k));
       if (oldDoc.status !== 'draft' && !isStatusOnlyChange) {
         console.warn("Modification refusée : La facture n'est plus à l'état de brouillon.");
         return prev;
@@ -723,16 +786,28 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
       }
 
       const newDocs = docs.map(d => d.id === id ? newDoc : d);
-      api.updateDocument(id, newDoc).catch(err => alert("Erreur Serveur: " + err.message));
-      
-      return { 
-        ...prev, 
+      docToSync = newDoc;
+
+      return {
+        ...prev,
         documents: newDocs,
         documentCounters: newCounters,
         stockMovements: newMovements,
         products: updatedProducts
       };
     });
+    if (docToSync) {
+      // Idem que addDocument : le serveur peut avoir attribué un numéro différent de l'estimation
+      // optimiste calculée localement (validation concurrente d'un autre document du même type).
+      api.updateDocument(id, docToSync).then(res => {
+        if (res?.reference && res.reference !== docToSync!.reference) {
+          setData(prev => ({
+            ...prev,
+            documents: (prev.documents || []).map(d => d.id === id ? { ...d, reference: res.reference } : d)
+          }));
+        }
+      }).catch(err => alert("Erreur Serveur: " + err.message));
+    }
   }, []);
 
   const deleteDocument = useCallback((id: string) => {
@@ -859,14 +934,15 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const updateExpense = useCallback((id: string, updates: Partial<Expense>) => {
+    let fullEntity: Expense | undefined;
     setData(prev => {
       const newExpenses = (prev.expenses || []).map(e => e.id === id ? { ...e, ...updates } : e);
-      const fullEntity = newExpenses.find(e => e.id === id);
-      if (fullEntity) {
-        api.updateExpense(id, fullEntity).catch(err => alert("Erreur Serveur: " + err.message));
-      }
+      fullEntity = newExpenses.find(e => e.id === id);
       return { ...prev, expenses: newExpenses };
     });
+    if (fullEntity) {
+      api.updateExpense(id, fullEntity).catch(err => alert("Erreur Serveur: " + err.message));
+    }
   }, []);
 
   const deleteExpense = useCallback((id: string) => {
@@ -954,7 +1030,8 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
       addNote, deleteNote,
       addDocument, updateDocument, deleteDocument, addPayment, getClientSituation, getSupplierSituation,
       addStockMovement,
-      addExpense, updateExpense, deleteExpense
+      addExpense, updateExpense, deleteExpense,
+      addActivityLog, updateFiscalSettings, setNotificationRead
     }}>
       {children}
     </CRMContext.Provider>

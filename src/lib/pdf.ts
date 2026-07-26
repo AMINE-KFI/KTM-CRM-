@@ -163,6 +163,7 @@ export interface PrintOptions {
 export function generateDocumentPDF(docData: BusinessDocument, company: Company, fiscalSettings?: FiscalSettings, totalPaid: number = 0, returnBlob: boolean = false, printOptions?: PrintOptions): Blob | void {
   const doc = new jsPDF();
   const isKLTools = docData.tenant === 'kltools';
+  const stampAmount = docData.stampAmount || 0;
 
   // 1. En-tête (Tenant)
   if (isKLTools) {
@@ -189,17 +190,46 @@ export function generateDocumentPDF(docData: BusinessDocument, company: Company,
   }
   doc.text(tenantInfo, 14, 32);
 
-  // 2. Info Client
+  // 2. Info Client — toutes les informations fiscales disponibles, pas seulement le NIF
   doc.setFontSize(12);
   doc.setTextColor(0);
   doc.setFont('helvetica', 'bold');
   doc.text('Client :', 120, 25);
-  doc.setFontSize(10);
+  doc.setFontSize(9);
   doc.setFont('helvetica', 'normal');
-  doc.text(company.name, 120, 32);
-  doc.text(company.address || '', 120, 37);
-  doc.text(`${company.postalCode || ''} ${company.city || ''}`, 120, 42);
-  if (company.nif) doc.text(`NIF: ${company.nif}`, 120, 47);
+
+  const clientLines: string[] = [];
+  clientLines.push(company.legalForm ? `${company.name} (${company.legalForm})` : company.name);
+  if (company.address) clientLines.push(company.address);
+  const clientCityLine = `${company.postalCode || ''} ${company.city || ''}`.trim();
+  if (clientCityLine) clientLines.push(clientCityLine);
+  if (company.country) clientLines.push(company.country);
+
+  const clientFiscalLine1 = [
+    company.rc ? `RC: ${company.rc}` : null,
+    company.nif ? `NIF: ${company.nif}` : null
+  ].filter(Boolean).join(' | ');
+  if (clientFiscalLine1) clientLines.push(clientFiscalLine1);
+
+  const clientFiscalLine2 = [
+    company.nis ? `NIS: ${company.nis}` : null,
+    company.art ? `ART: ${company.art}` : null
+  ].filter(Boolean).join(' | ');
+  if (clientFiscalLine2) clientLines.push(clientFiscalLine2);
+
+  if (company.capital) clientLines.push(`Capital: ${company.capital}`);
+
+  const clientContactLine = [
+    company.email ? `Email: ${company.email}` : null,
+    company.phone ? `Tél: ${company.phone}` : null
+  ].filter(Boolean).join(' | ');
+  if (clientContactLine) clientLines.push(clientContactLine);
+
+  let clientY = 32;
+  clientLines.forEach(line => {
+    doc.text(line, 120, clientY);
+    clientY += 4.5;
+  });
 
   // 3. Info Document
   const docTypeLabels: Record<string, string> = {
@@ -208,6 +238,9 @@ export function generateDocumentPDF(docData: BusinessDocument, company: Company,
     delivery_note: 'BON DE LIVRAISON',
     purchase_order: 'BON DE COMMANDE'
   };
+
+  // La position du titre s'adapte à la hauteur du bloc client (qui peut contenir jusqu'à 7 lignes)
+  const titleY = Math.max(60, clientY + 8);
 
   doc.setFontSize(16);
   doc.setTextColor(0);
@@ -218,11 +251,11 @@ export function generateDocumentPDF(docData: BusinessDocument, company: Company,
   if (printOptions?.annule) extraTitleTags += '[ANNULE]';
 
   const docTitle = `${docTypeLabels[docData.type] || 'DOCUMENT'}${extraTitleTags} N° ${docData.reference}`;
-  doc.text(docTitle, 14, 60);
+  doc.text(docTitle, 14, titleY);
 
   doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
-  let yPos = 68;
+  let yPos = titleY + 8;
   doc.text(`Date d'émission : ${formatDate(docData.createdAt)}`, 14, yPos);
   yPos += 5;
   
@@ -242,12 +275,13 @@ export function generateDocumentPDF(docData: BusinessDocument, company: Company,
     doc.text(`Suite au : ${docData.linkedDocumentRef}`, 14, yPos);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(0);
+    yPos += 5;
   }
 
   // 4. Tableau des articles
   const tableColumn = ["Description", "Quantité", "Prix Unitaire HT", "Total HT"];
   const tableRows = docData.items.map(item => [
-    item.name,
+    item.description || '',
     item.quantity.toString(),
     formatCurrency(item.unitPrice),
     formatCurrency(item.total)
@@ -256,7 +290,7 @@ export function generateDocumentPDF(docData: BusinessDocument, company: Company,
   autoTable(doc, {
     head: [tableColumn],
     body: tableRows,
-    startY: 85,
+    startY: yPos + 6,
     styles: { fontSize: 10 },
     headStyles: { fillColor: isKLTools ? [231, 76, 60] : [52, 152, 219] },
     columnStyles: {
@@ -272,6 +306,7 @@ export function generateDocumentPDF(docData: BusinessDocument, company: Company,
   
   // Calculer la hauteur approximative requise pour le pied de page
   let footerHeight = 35; // Base pour les totaux HT, TVA, TTC
+  if (stampAmount > 0) footerHeight += 7; // Ligne droit de timbre
   if (totalPaid > 0) footerHeight += 25; // Lignes supplémentaires pour Payé, Reste, Soldé
   
   const amountInWords = numberToWordsFR(docData.totalAmount);
@@ -307,7 +342,14 @@ export function generateDocumentPDF(docData: BusinessDocument, company: Company,
   const vatLabel = docData.vatAmount > 0 ? `TVA :` : 'TVA (Exonéré) :';
   doc.text(vatLabel, 160, rightColY, { align: 'right' });
   doc.text(formatCurrency(docData.vatAmount), 196, rightColY, { align: 'right' });
-  rightColY += 9;
+  rightColY += 7;
+
+  if (stampAmount > 0) {
+    doc.text('Droit de timbre :', 160, rightColY, { align: 'right' });
+    doc.text(formatCurrency(stampAmount), 196, rightColY, { align: 'right' });
+    rightColY += 7;
+  }
+  rightColY += 2;
 
   doc.setFontSize(12);
   doc.setFont('helvetica', 'bold');

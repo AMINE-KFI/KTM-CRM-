@@ -5,7 +5,7 @@ import type { Company } from '@/types';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Building2, Plus, Search, Users, FileText, Phone, Mail, MapPin, ChevronRight, Upload, Download, FileSpreadsheet, Filter } from 'lucide-react';
+import { Building2, Plus, Search, FileText, Phone, Mail, MapPin, ChevronRight, Upload, Download, FileSpreadsheet, Filter } from 'lucide-react';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator
 } from '@/components/ui/dropdown-menu';

@@ -12,7 +12,12 @@ const pool = mysql.createPool({
   port: Number(process.env.DB_PORT) || 8889,
   waitForConnections: true,
   connectionLimit: 10,
-  queueLimit: 0
+  queueLimit: 0,
+  // Sans ça, mysql2 renvoie les colonnes DATE/DATETIME/TIMESTAMP en objets Date JS, convertis
+  // en horodatage UTC avec décalage de fuseau horaire au (dé)sérialisation JSON. Une date stockée
+  // décalait alors d'un jour à chaque aller-retour (fetch → renvoi au serveur), et MariaDB rejetait
+  // ensuite ce format complet (avec heure) sur les colonnes DATE.
+  dateStrings: true
 });
 
 // We can test the connection here
